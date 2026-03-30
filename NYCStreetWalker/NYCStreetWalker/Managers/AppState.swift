@@ -207,6 +207,14 @@ class AppState: ObservableObject {
         }
     }
 
+    func updateDisplayName(_ name: String) async {
+        await updateProfile(displayName: name, colorHex: currentUser?.colorHex ?? UserProfile.randomColor())
+    }
+
+    func updateColor(_ hex: String) async {
+        await updateProfile(displayName: currentUser?.displayName ?? "NYC Walker", colorHex: hex)
+    }
+
     // MARK: - Stats
 
     var totalWalkedStreets: Int {

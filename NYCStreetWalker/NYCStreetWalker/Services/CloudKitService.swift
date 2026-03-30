@@ -184,7 +184,7 @@ class CloudKitService {
 
     // MARK: - Pending Friend Requests
 
-    func fetchPendingRequests() async throws -> [FriendRequestInfo] {
+    func fetchPendingRequests() async throws -> [UserProfile] {
         try await checkiCloudAvailable()
         let currentUserID = try await container.userRecordID().recordName
 
@@ -193,23 +193,18 @@ class CloudKitService {
 
         let (results, _) = try await publicDB.records(matching: query, resultsLimit: 50)
 
-        var requests: [FriendRequestInfo] = []
+        var profiles: [UserProfile] = []
         for (_, result) in results {
             guard case .success(let record) = result,
-                  let fromID = record["fromUserID"] as? String,
-                  let createdAt = record["createdAt"] as? Date else { continue }
+                  let fromID = record["fromUserID"] as? String else { continue }
 
-            let senderName: String
             if let senderProfile = try? await fetchPublicProfile(userID: fromID) {
-                senderName = senderProfile.displayName
+                profiles.append(senderProfile)
             } else {
-                senderName = "Unknown User"
+                profiles.append(UserProfile(id: fromID, displayName: "Unknown User"))
             }
-            requests.append(FriendRequestInfo(fromUserID: fromID,
-                                               fromDisplayName: senderName,
-                                               createdAt: createdAt))
         }
-        return requests
+        return profiles
     }
 
     // MARK: - Push Subscriptions
