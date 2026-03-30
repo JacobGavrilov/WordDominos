@@ -184,13 +184,17 @@ class AppState: ObservableObject {
         }
     }
 
-    func searchUsers(query: String) async -> [UserProfile] {
+    func searchUsers(by query: String) async -> [UserProfile] {
         guard !query.isEmpty else { return [] }
         do {
             return try await cloudKitService.searchUsers(by: query)
         } catch {
             return []
         }
+    }
+
+    func searchUsers(query: String) async -> [UserProfile] {
+        await searchUsers(by: query)
     }
 
     // MARK: - Profile

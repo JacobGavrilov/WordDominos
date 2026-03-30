@@ -10,6 +10,10 @@ class StreetMatchingService {
     // MARK: - Public API
 
     /// Given a GPS track and a collection of streets, return IDs of streets considered walked.
+    func matchStreets(locations: [CLLocation], streets: [Street]) -> Set<String> {
+        matchStreets(track: locations, streets: streets)
+    }
+
     func matchStreets(track: [CLLocation], streets: [Street]) -> Set<String> {
         guard track.count >= 2 else { return [] }
         var walked = Set<String>()
