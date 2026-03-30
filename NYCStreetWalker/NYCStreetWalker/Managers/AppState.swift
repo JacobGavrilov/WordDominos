@@ -1,8 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
-import CloudKit
-import AuthenticationServices
+import CoreLocation
 
 @MainActor
 class AppState: ObservableObject {
@@ -15,16 +14,18 @@ class AppState: ObservableObject {
     @Published var currentSession: WalkSession?
 
     // MARK: - Data
-    @Published var neighborhoods: [Neighborhood] = NYCNeighborhoodData.neighborhoods
+    @Published var neighborhoods: [Neighborhood] = Neighborhood.nycNeighborhoods
     @Published var friends: [UserProfile] = []
     @Published var pendingRequests: [UserProfile] = []
     @Published var selectedNeighborhood: Neighborhood?
+    @Published var selectedFriend: UserProfile?
 
     // MARK: - UI State
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
 
     // MARK: - Services
+
     let locationService = LocationService()
     let streetMatchingService = StreetMatchingService()
     let cloudKitService = CloudKitService()
@@ -35,47 +36,48 @@ class AppState: ObservableObject {
     // MARK: - Init
 
     func initialize() {
+        locationService.requestAuthorization()
         bindLocationUpdates()
-        Task { await checkCloudKitAndSignIn() }
+        Task { await silentSignIn() }
     }
 
-    // MARK: - Auth
+    // MARK: - Sign In
 
     func signInWithApple() async {
         isLoading = true
         defer { isLoading = false }
+        errorMessage = nil
 
         do {
-            let profile = try await cloudKitService.fetchOrCreateUserProfile(
-                displayName: savedDisplayName() ?? "NYC Walker"
-            )
+            let profile = try await cloudKitService.fetchOrCreateUserProfile()
             currentUser = profile
             isSignedIn = true
             persistUserID(profile.id)
-            locationService.requestAuthorization()
             await loadFriends()
+            try? await cloudKitService.subscribeToFriendUpdates()
             await restoreWalkedStreets()
         } catch {
             errorMessage = "Sign in failed: \(error.localizedDescription)"
         }
     }
 
-    private func checkCloudKitAndSignIn() async {
-        await cloudKitService.checkAvailability()
-        if cloudKitService.isAvailable, let savedID = savedUserID() {
-            do {
-                let profile = try await cloudKitService.fetchOrCreateUserProfile(
-                    displayName: savedDisplayName() ?? "NYC Walker"
-                )
-                currentUser = profile
-                isSignedIn = true
-                locationService.requestAuthorization()
-                await loadFriends()
-                await restoreWalkedStreets()
-            } catch {
-                // Not an error - user just hasn't signed in yet
-            }
+    private func silentSignIn() async {
+        guard savedUserID() != nil else { return }
+        do {
+            let profile = try await cloudKitService.fetchOrCreateUserProfile()
+            currentUser = profile
+            isSignedIn = true
+            await loadFriends()
+            await restoreWalkedStreets()
+        } catch {
+            // Not signed into iCloud – stay on sign-in screen
         }
+    }
+
+    func signOut() {
+        currentUser = nil
+        isSignedIn = false
+        clearUserID()
     }
 
     // MARK: - Walk Tracking
@@ -95,29 +97,28 @@ class AppState: ObservableObject {
         session.endTime = Date()
         session.gpsTrack = locationService.locationTrack.map(\.coordinate)
 
-        // Match streets for all neighborhoods that have been loaded
         let loadedStreets = neighborhoods.flatMap(\.streets)
         let newStreetIDs = streetMatchingService.matchStreets(
-            track: locationService.locationTrack,
+            locations: locationService.locationTrack,
             streets: loadedStreets
         )
 
         session.matchedStreetIDs = newStreetIDs
         currentSession = session
 
-        // Update local user data
-        if var updatedUser = currentUser {
-            updatedUser.walkedStreetIDs.formUnion(newStreetIDs)
-            currentUser = updatedUser
-            applyWalkedStreets(for: updatedUser)
+        if var u = currentUser {
+            u.walkedStreetIDs.formUnion(newStreetIDs)
+            currentUser = u
+            applyWalkedStreets(for: u)
         }
 
-        // Save to CloudKit
+        queuePendingStreets(newStreetIDs)
+
         do {
             try await cloudKitService.saveWalkedStreets(newStreetIDs, userID: user.id)
+            clearPendingStreets()
         } catch {
-            // Queue for later (persist locally)
-            queuePendingStreets(newStreetIDs)
+            // Streets remain queued for retry
         }
 
         locationService.clearTrack()
@@ -127,13 +128,12 @@ class AppState: ObservableObject {
 
     func loadNeighborhoodStreets(_ neighborhood: Neighborhood) async {
         guard let idx = neighborhoods.firstIndex(where: { $0.id == neighborhood.id }) else { return }
-        if !neighborhoods[idx].streets.isEmpty { return }
+        guard neighborhoods[idx].streets.isEmpty else { return }
 
         do {
             var streets = try await overpassService.fetchStreets(for: neighborhood)
-            // Mark which streets the current user has walked
             if let user = currentUser {
-                for i in 0..<streets.count {
+                for i in streets.indices {
                     if user.walkedStreetIDs.contains(streets[i].id) {
                         streets[i].walkedByUserIDs.insert(user.id)
                     }
@@ -155,37 +155,39 @@ class AppState: ObservableObject {
     func loadFriends() async {
         guard let user = currentUser else { return }
         do {
-            let fetched = try await cloudKitService.fetchFriends(for: user.id)
-            friends = fetched
-            let requests = try await cloudKitService.fetchPendingRequests(for: user.id)
-            pendingRequests = requests
+            friends = try await cloudKitService.fetchFriends(for: user.id)
+            pendingRequests = try await cloudKitService.fetchPendingRequests()
         } catch {
             // Non-fatal
         }
     }
 
-    func sendFriendRequest(to friendID: String) async {
-        guard let user = currentUser else { return }
+    func sendFriendRequest(to userID: String) async {
         do {
-            try await cloudKitService.sendFriendRequest(from: user.id, to: friendID)
+            try await cloudKitService.sendFriendRequest(to: userID)
         } catch {
             errorMessage = "Could not send friend request: \(error.localizedDescription)"
         }
     }
 
+    func inviteFriend(userID: String) async {
+        await sendFriendRequest(to: userID)
+    }
+
     func acceptFriendRequest(from senderID: String) async {
-        guard let user = currentUser else { return }
         do {
-            try await cloudKitService.acceptFriendRequest(from: senderID, myID: user.id)
+            try await cloudKitService.acceptFriendRequest(from: senderID)
+            pendingRequests.removeAll { $0.id == senderID }
             await loadFriends()
         } catch {
             errorMessage = "Could not accept request: \(error.localizedDescription)"
         }
     }
 
-    func searchUsers(by name: String) async -> [UserProfile] {
+    func searchUsers(query: String) async -> [UserProfile] {
+        guard !query.isEmpty else { return [] }
         do {
-            return try await cloudKitService.searchUsers(by: name)
+            return try await cloudKitService.searchUsers(by: query)
         } catch {
             return []
         }
@@ -193,42 +195,55 @@ class AppState: ObservableObject {
 
     // MARK: - Profile
 
-    func updateDisplayName(_ name: String) async {
+    func updateProfile(displayName: String, colorHex: String) async {
         guard var user = currentUser else { return }
-        user.displayName = name
+        user.displayName = displayName
+        user.colorHex    = colorHex
         currentUser = user
-        saveDisplayName(name)
         do {
             try await cloudKitService.updateUserProfile(user)
         } catch {
-            errorMessage = "Could not update profile"
+            errorMessage = "Could not save profile: \(error.localizedDescription)"
         }
     }
 
-    func updateColor(_ hex: String) async {
-        guard var user = currentUser else { return }
-        user.colorHex = hex
-        currentUser = user
-        do {
-            try await cloudKitService.updateUserProfile(user)
-        } catch {}
+    // MARK: - Stats
+
+    var totalWalkedStreets: Int {
+        currentUser?.walkedStreetIDs.count ?? 0
     }
 
-    func signOut() {
-        currentUser = nil
-        isSignedIn = false
-        clearUserID()
+    var totalDistanceMeters: Double {
+        guard let userID = currentUser?.id else { return 0 }
+        return neighborhoods
+            .flatMap(\.streets)
+            .filter { $0.isWalkedBy(userID) }
+            .reduce(0) { $0 + $1.lengthMeters }
+    }
+
+    var completedNeighborhoods: Int {
+        guard let userID = currentUser?.id else { return 0 }
+        return neighborhoods.filter { n in
+            n.totalStreets > 0 && n.completionPercentage(by: userID) >= 100.0
+        }.count
+    }
+
+    var currentStreak: Int {
+        UserDefaults.standard.integer(forKey: "walkStreakDays")
     }
 
     // MARK: - Private Helpers
 
     private func bindLocationUpdates() {
         locationService.$locationTrack
-            .debounce(for: .seconds(2), scheduler: RunLoop.main)
+            .debounce(for: .seconds(3), scheduler: RunLoop.main)
             .sink { [weak self] track in
-                guard let self, self.isTracking, let user = self.currentUser else { return }
+                guard let self, self.isTracking else { return }
                 let loadedStreets = self.neighborhoods.flatMap(\.streets)
-                let matched = self.streetMatchingService.matchStreets(track: track, streets: loadedStreets)
+                let matched = self.streetMatchingService.matchStreets(
+                    locations: track,
+                    streets: loadedStreets
+                )
                 if !matched.isEmpty {
                     self.currentSession?.matchedStreetIDs.formUnion(matched)
                 }
@@ -239,19 +254,19 @@ class AppState: ObservableObject {
     private func restoreWalkedStreets() async {
         guard let user = currentUser else { return }
         do {
-            let ids = try await cloudKitService.fetchWalkedStreetIDs(for: user.id)
+            let ids = try await cloudKitService.fetchFriendWalkedStreets(friendID: user.id)
             if var u = currentUser {
                 u.walkedStreetIDs = ids
                 currentUser = u
             }
         } catch {
-            // Use locally cached version
+            // Use locally cached version from UserDefaults
         }
     }
 
     private func applyWalkedStreets(for user: UserProfile) {
-        for i in 0..<neighborhoods.count {
-            for j in 0..<neighborhoods[i].streets.count {
+        for i in neighborhoods.indices {
+            for j in neighborhoods[i].streets.indices {
                 if user.walkedStreetIDs.contains(neighborhoods[i].streets[j].id) {
                     neighborhoods[i].streets[j].walkedByUserIDs.insert(user.id)
                 }
@@ -273,17 +288,13 @@ class AppState: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "currentUserID")
     }
 
-    private func savedDisplayName() -> String? {
-        UserDefaults.standard.string(forKey: "currentUserDisplayName")
-    }
-
-    private func saveDisplayName(_ name: String) {
-        UserDefaults.standard.set(name, forKey: "currentUserDisplayName")
-    }
-
     private func queuePendingStreets(_ ids: Set<String>) {
         var pending = Set(UserDefaults.standard.stringArray(forKey: "pendingStreetIDs") ?? [])
         pending.formUnion(ids)
         UserDefaults.standard.set(Array(pending), forKey: "pendingStreetIDs")
+    }
+
+    private func clearPendingStreets() {
+        UserDefaults.standard.removeObject(forKey: "pendingStreetIDs")
     }
 }

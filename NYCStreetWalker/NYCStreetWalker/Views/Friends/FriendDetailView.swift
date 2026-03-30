@@ -183,7 +183,7 @@ struct FriendDetailView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let ids = try await appState.cloudKitService.fetchWalkedStreetIDs(for: friend.id)
+            let ids = try await appState.cloudKitService.fetchFriendWalkedStreets(friendID: friend.id)
             friendWalkedIDs = ids
             // Apply to streets
             for i in 0..<appState.neighborhoods.count {

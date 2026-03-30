@@ -62,7 +62,7 @@ struct Neighborhood: Identifiable, Codable {
 
     func completionPercentage(by userID: String) -> Double {
         guard totalStreets > 0 else { return 0 }
-        return Double(walkedCount(by: userID)) / Double(totalStreets) * 100.0
+        return Double(walkedCount(by: userID)) / Double(totalStreets)
     }
 
     func unwalkedStreets(by userID: String) -> [Street] {
