@@ -1,0 +1,11 @@
+{
+  "name": "nyc-street-walker-pwa",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "express": "^4.18.2",
+    "localtunnel": "^2.0.2",
+    "uuid": "^9.0.0"
+  }
+}
