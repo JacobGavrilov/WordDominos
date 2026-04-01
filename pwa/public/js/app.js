@@ -198,6 +198,7 @@ async function bootApp() {
   loadFriends();
   loadStats();
   startAutoTracking();
+  checkInviteInURL();
 }
 
 // ── Screen helper ─────────────────────────────────────────────────────────
@@ -660,6 +661,10 @@ function switchTab(name, btn) {
     t.classList.remove('active'); t.style.display = 'none';
   });
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+  // Also hide friend detail if switching away
+  const fd = document.getElementById('tab-friend-detail');
+  if (fd) { fd.classList.remove('active'); fd.style.display = 'none'; }
 
   const target = document.getElementById('tab-' + name);
   target.classList.add('active'); target.style.display = 'flex';

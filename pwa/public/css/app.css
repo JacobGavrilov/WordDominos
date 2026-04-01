@@ -187,6 +187,28 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); }
 .street-len { font-size: 12px; color: var(--text2); }
 .walk-count { font-size: 11px; font-weight: 700; background: rgba(34,197,94,0.15); color: var(--green); padding: 2px 6px; border-radius: 6px; }
 
+/* ── Invite button ── */
+.btn-invite { background: var(--green); color: #000; font-size: 13px; font-weight: 700; border: none; border-radius: 20px; padding: 7px 16px; cursor: pointer; }
+.btn-share { background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600; border: none; border-radius: 10px; padding: 8px 14px; cursor: pointer; white-space: nowrap; }
+
+/* ── Sub-tabs ── */
+.sub-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--surface2); padding: 0 16px; background: var(--bg); }
+.sub-tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text2); font-size: 14px; font-weight: 600; padding: 10px 20px 8px; cursor: pointer; }
+.sub-tab.active { color: var(--green); border-bottom-color: var(--green); }
+
+/* ── Panel handle ── */
+.panel-handle { width: 36px; height: 4px; background: var(--surface2); border-radius: 2px; align-self: center; margin-bottom: 4px; }
+
+/* ── Invite link box ── */
+.invite-link-box { background: var(--bg); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.invite-link-row { display: flex; align-items: center; gap: 10px; }
+.invite-link-preview { flex: 1; font-size: 12px; color: var(--green); word-break: break-all; font-family: monospace; }
+.divider-or { display: flex; align-items: center; gap: 10px; color: var(--text2); font-size: 12px; }
+.divider-or::before, .divider-or::after { content:''; flex:1; height:1px; background:var(--surface2); }
+
+/* ── Invite landing banner ── */
+.invite-banner { position: fixed; top: calc(var(--safe-top) + var(--status-h) + 8px); left: 12px; right: 12px; background: var(--surface); border: 1px solid var(--green); border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; z-index: 600; box-shadow: 0 4px 20px rgba(34,197,94,0.2); font-size: 14px; font-weight: 500; }
+
 /* ── Friends ── */
 .friend-card { background: var(--surface); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; }
 .avatar { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; }
@@ -195,6 +217,24 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); }
 .friend-name { font-weight: 600; font-size: 15px; }
 .friend-sub { font-size: 13px; color: var(--text2); margin-top: 2px; }
 .mutual-badge { background: rgba(34,197,94,0.15); color: var(--green); font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 8px; }
+
+/* ── Friend detail ── */
+.fd-section-label { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 16px 4px; }
+.fd-comparison { display: flex; gap: 10px; padding: 0 14px 4px; }
+.fd-comp-card { flex: 1; background: var(--surface); border-radius: 12px; padding: 12px; text-align: center; }
+.fd-comp-card .num { font-size: 22px; font-weight: 700; }
+.fd-comp-card .lbl { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.fd-comp-card.mutual .num { color: var(--green); }
+.fd-comp-card.only-them .num { color: #3b82f6; }
+.fd-comp-card.only-me .num { color: #f97316; }
+
+/* ── Activity feed ── */
+.activity-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--surface2); }
+.activity-item:last-child { border-bottom: none; }
+.activity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.activity-text { flex: 1; font-size: 13px; line-height: 1.4; }
+.activity-text strong { color: var(--text); }
+.activity-time { font-size: 11px; color: var(--text2); white-space: nowrap; }
 
 /* ── Add friend panel ── */
 .bottom-panel { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-radius: 20px 20px 0 0; padding: 24px 20px; padding-bottom: calc(24px + var(--safe-bottom)); z-index: 200; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 -8px 40px rgba(0,0,0,0.5); }

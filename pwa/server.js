@@ -314,6 +314,50 @@ app.get('/api/stats', auth, async (req, res) => {
   }
 });
 
+// ── Invite links ───────────────────────────────────────────────────────────
+// Generate a short-lived invite token that encodes the sender's user ID.
+app.post('/api/invite/generate', auth, async (req, res) => {
+  const token = jwt.sign({ inviterId: req.user.id, purpose: 'invite' }, JWT_SECRET, { expiresIn: '7d' });
+  res.json({ token });
+});
+
+// Preview an invite (who sent it) — used before the recipient logs in
+app.get('/api/invite/:token', async (req, res) => {
+  try {
+    const payload = jwt.verify(req.params.token, JWT_SECRET);
+    if (payload.purpose !== 'invite') throw new Error();
+    const result = await pool.query(
+      'SELECT id, first_name, last_name FROM users WHERE id = $1', [payload.inviterId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Invite not found' });
+    const u = result.rows[0];
+    res.json({ inviterId: u.id, name: u.first_name + ' ' + u.last_name });
+  } catch {
+    res.status(400).json({ error: 'Invalid or expired invite link' });
+  }
+});
+
+// Accept an invite — adds both users as friends
+app.post('/api/invite/:token/accept', auth, async (req, res) => {
+  try {
+    const payload = jwt.verify(req.params.token, JWT_SECRET);
+    if (payload.purpose !== 'invite') throw new Error();
+    const inviterId = payload.inviterId;
+    if (inviterId === req.user.id) return res.status(400).json({ error: "That's your own invite!" });
+
+    const inviter = await pool.query('SELECT id, first_name, last_name FROM users WHERE id = $1', [inviterId]);
+    if (!inviter.rows.length) return res.status(404).json({ error: 'Inviter not found' });
+
+    await pool.query('INSERT INTO friends VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.user.id, inviterId]);
+    await pool.query('INSERT INTO friends VALUES ($1,$2) ON CONFLICT DO NOTHING', [inviterId, req.user.id]);
+
+    const u = inviter.rows[0];
+    res.json({ ok: true, friend: { id: u.id, name: u.first_name + ' ' + u.last_name } });
+  } catch {
+    res.status(400).json({ error: 'Invalid or expired invite link' });
+  }
+});
+
 // ── Friends ────────────────────────────────────────────────────────────────
 app.post('/api/friends', auth, async (req, res) => {
   const { friendId } = req.body;
@@ -332,15 +376,42 @@ app.post('/api/friends', auth, async (req, res) => {
 
 app.get('/api/friends', auth, async (req, res) => {
   const rows = await pool.query(`
-    SELECT u.id, u.first_name || ' ' || u.last_name AS name,
-           COUNT(w.street_id) AS total_walked
+    SELECT u.id,
+           u.first_name || ' ' || u.last_name AS name,
+           COUNT(DISTINCT w.street_id) AS total_walked,
+           MAX(w.last_walked) AS last_active
     FROM friends f
     JOIN users u ON u.id = f.friend_id
     LEFT JOIN walks w ON w.user_id = u.id
     WHERE f.user_id = $1
     GROUP BY u.id, u.first_name, u.last_name
+    ORDER BY last_active DESC NULLS LAST
   `, [req.user.id]);
   res.json(rows.rows);
+});
+
+// ── Friend activity feed ───────────────────────────────────────────────────
+// Returns the 30 most recent street walks across all friends
+app.get('/api/activity', auth, async (req, res) => {
+  try {
+    const rows = await pool.query(`
+      SELECT u.id AS user_id,
+             u.first_name || ' ' || u.last_name AS name,
+             w.neighborhood_id,
+             w.street_id,
+             w.walk_count,
+             w.last_walked
+      FROM friends f
+      JOIN users u ON u.id = f.friend_id
+      JOIN walks w ON w.user_id = u.id
+      WHERE f.user_id = $1
+      ORDER BY w.last_walked DESC
+      LIMIT 30
+    `, [req.user.id]);
+    res.json(rows.rows);
+  } catch(e) {
+    res.json([]);
+  }
 });
 
 // ── Fallback → SPA ─────────────────────────────────────────────────────────

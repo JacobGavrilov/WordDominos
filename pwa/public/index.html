@@ -137,23 +137,56 @@
   <div id="tab-friends" class="tab-content hidden">
     <div class="tab-header">
       <h2>Friends</h2>
-      <button class="btn-small" onclick="showAddFriend()">+ Add</button>
+      <button class="btn-invite" onclick="showAddFriend()">+ Invite</button>
+    </div>
+    <!-- Sub-tabs: Friends / Activity -->
+    <div class="sub-tabs">
+      <button class="sub-tab active" id="subtab-friends-btn" onclick="showFriendsSubTab('friends',this)">Friends</button>
+      <button class="sub-tab" id="subtab-activity-btn" onclick="showFriendsSubTab('activity',this)">Activity</button>
     </div>
     <div id="friends-list" class="list-container"></div>
+    <div id="activity-feed" class="list-container hidden"></div>
+
+    <!-- Invite / Add friend sheet -->
     <div id="add-friend-panel" class="bottom-panel hidden">
+      <div class="panel-handle"></div>
       <h3>Add a Friend</h3>
-      <p class="hint">Share your ID with friends or paste theirs below.</p>
-      <div class="your-id-box">
-        <label>Your ID</label>
-        <div class="id-row">
-          <code id="your-user-id"></code>
-          <button onclick="copyMyID()" class="btn-small">Copy</button>
+
+      <!-- Primary: shareable invite link -->
+      <div class="invite-link-box">
+        <p class="hint">Share this link — when they open it, you're automatically connected.</p>
+        <div class="invite-link-row">
+          <span id="invite-link-text" class="invite-link-preview">Generating…</span>
+          <button id="invite-share-btn" class="btn-share" onclick="shareInviteLink()">Share 🔗</button>
         </div>
       </div>
-      <input id="friend-id-input" type="text" placeholder="Paste friend's ID" style="font-family:monospace;font-size:13px">
+
+      <div class="divider-or"><span>or add by ID</span></div>
+
+      <input id="friend-id-input" type="text" placeholder="Paste friend's User ID" style="font-family:monospace;font-size:13px">
       <button onclick="addFriendByID()" class="btn-primary">Add Friend</button>
       <button onclick="hideAddFriend()" class="btn-ghost">Cancel</button>
     </div>
+
+    <!-- Invite landing banner (shown when opened via invite link) -->
+    <div id="invite-banner" class="invite-banner hidden">
+      <span id="invite-banner-text"></span>
+      <button id="invite-banner-btn" class="btn-small" onclick="acceptPendingInvite()">Accept</button>
+    </div>
+  </div>
+
+  <!-- TAB: FRIEND DETAIL -->
+  <div id="tab-friend-detail" class="tab-content hidden">
+    <div class="detail-header">
+      <button class="back-btn" onclick="closeFriendDetail()">← Back</button>
+      <div id="fd-avatar" class="avatar" style="width:36px;height:36px;font-size:14px"></div>
+      <h2 id="fd-name"></h2>
+    </div>
+    <div class="progress-summary" id="fd-stats"></div>
+    <div class="fd-section-label">Comparison</div>
+    <div class="fd-comparison" id="fd-comparison"></div>
+    <div class="fd-section-label">Their Recent Streets</div>
+    <div id="fd-streets" class="list-container" style="padding-top:0"></div>
   </div>
 
   <!-- TAB: PROFILE -->
