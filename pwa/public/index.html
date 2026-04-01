@@ -37,6 +37,29 @@
     </div>
     <button class="btn-primary" onclick="doLogin()">Log In</button>
     <p id="login-error" class="form-error hidden"></p>
+    <p style="text-align:center;margin-top:4px"><a href="#" class="forgot-link" onclick="showForgotPassword(event)">Forgot password?</a></p>
+  </div>
+
+  <!-- FORGOT PASSWORD -->
+  <div id="forgot-panel" class="auth-form hidden">
+    <p style="color:var(--text2);font-size:14px;text-align:center">Enter your email and we'll send a reset link.</p>
+    <input id="forgot-email" type="email" placeholder="Email" autocomplete="email">
+    <button class="btn-primary" onclick="doForgot()">Send Reset Link</button>
+    <p id="forgot-msg" class="form-error hidden" style="color:var(--green)"></p>
+    <button class="btn-ghost" onclick="showAuthTab('login')">← Back to Login</button>
+  </div>
+
+  <!-- RESET PASSWORD -->
+  <div id="reset-panel" class="auth-form hidden">
+    <p style="color:var(--text2);font-size:14px;text-align:center">Enter your reset token and new password.</p>
+    <input id="reset-token" type="text" placeholder="Reset token" style="font-family:monospace;font-size:13px">
+    <div class="pw-row">
+      <input id="reset-password" type="password" placeholder="New password">
+      <button class="pw-toggle" onclick="togglePw('reset-password')">👁</button>
+    </div>
+    <button class="btn-primary" onclick="doReset()">Set New Password</button>
+    <p id="reset-error" class="form-error hidden"></p>
+    <button class="btn-ghost" onclick="showAuthTab('login')">← Back to Login</button>
   </div>
 
   <!-- SIGN UP -->

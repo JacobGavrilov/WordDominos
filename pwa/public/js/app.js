@@ -116,6 +116,64 @@ function showFormError(el, msg) {
   el.classList.remove('hidden');
 }
 
+function showForgotPassword(e) {
+  e.preventDefault();
+  ['login-panel','signup-panel','reset-panel'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('forgot-panel').classList.remove('hidden');
+  document.getElementById('tab-login-btn').classList.remove('active');
+  document.getElementById('tab-signup-btn').classList.remove('active');
+}
+
+async function doForgot() {
+  const email  = document.getElementById('forgot-email').value.trim();
+  const msgEl  = document.getElementById('forgot-msg');
+  msgEl.classList.add('hidden');
+  if (!email) return;
+  try {
+    const r    = await fetch('/api/auth/forgot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+    const data = await r.json();
+    msgEl.textContent = data.message || 'Check your email.';
+    msgEl.classList.remove('hidden');
+    if (data.resetToken) {
+      // Dev mode: show the token and transition to reset panel
+      setTimeout(() => {
+        document.getElementById('forgot-panel').classList.add('hidden');
+        document.getElementById('reset-panel').classList.remove('hidden');
+        document.getElementById('reset-token').value = data.resetToken;
+      }, 1500);
+    }
+  } catch(e) { msgEl.textContent = 'Error. Try again.'; msgEl.classList.remove('hidden'); }
+}
+
+async function doReset() {
+  const token    = document.getElementById('reset-token').value.trim();
+  const password = document.getElementById('reset-password').value;
+  const errEl    = document.getElementById('reset-error');
+  errEl.classList.add('hidden');
+  if (!token || !password) return;
+  try {
+    const r = await fetch('/api/auth/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resetToken: token, password }) });
+    const data = await r.json();
+    if (!r.ok) { showFormError(errEl, data.error); return; }
+    showToast('Password updated! Please log in.');
+    showAuthTab('login');
+  } catch(e) { showFormError(errEl, 'Error. Try again.'); }
+}
+
+// Extend showAuthTab to also hide forgot/reset panels
+const _origShowAuthTab = typeof showAuthTab !== 'undefined' ? showAuthTab : null;
+function showAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('login-panel').classList.toggle('hidden', !isLogin);
+  document.getElementById('signup-panel').classList.toggle('hidden', isLogin);
+  document.getElementById('tab-login-btn').classList.toggle('active', isLogin);
+  document.getElementById('tab-signup-btn').classList.toggle('active', !isLogin);
+  const fp = document.getElementById('forgot-panel');
+  const rp = document.getElementById('reset-panel');
+  if (fp) fp.classList.add('hidden');
+  if (rp) rp.classList.add('hidden');
+}
+
 function signOut() {
   localStorage.removeItem('token');
   location.reload();
@@ -138,6 +196,7 @@ async function bootApp() {
   renderNeighborhoodList();
   renderProfile();
   loadFriends();
+  loadStats();
   startAutoTracking();
 }
 
@@ -186,10 +245,14 @@ function onGpsPoint(pos) {
   // Check current neighborhood
   const hood = hoodForCoords(lat, lon);
   if (hood) {
+    const enteredNewHood = !currentHood || currentHood.id !== hood.id;
     currentHood = hood;
     updateMapHoodPanel(hood);
-    // If streets are loaded for this hood, match immediately
-    if (hoodStreets.length && hoodStreets[0].neighborhoodId === hood.id) {
+
+    if (enteredNewHood) {
+      // Auto-load streets for this hood silently in the background
+      autoLoadHoodStreets(hood);
+    } else if (hoodStreets.length && hoodStreets[0].neighborhoodId === hood.id) {
       matchAndSave(hood);
     }
   }
@@ -197,6 +260,31 @@ function onGpsPoint(pos) {
 
 function onGpsError(err) {
   setStatusBar('inactive', err.code === 1 ? 'Location permission denied' : 'Location unavailable');
+}
+
+// Silently load streets when GPS enters a new neighborhood
+let _autoLoadingHood = null;
+async function autoLoadHoodStreets(hood) {
+  if (_autoLoadingHood === hood.id) return;
+  _autoLoadingHood = hood.id;
+
+  const already = streetCache[hood.id] || loadStreetCache(hood.id);
+  if (already) {
+    hoodStreets = already;
+    if (document.getElementById('tab-map').classList.contains('active')) renderStreetLayers(hood);
+    matchAndSave(hood);
+    return;
+  }
+
+  setStatusBar('active', `Loading ${hood.name}…`);
+  try {
+    hoodStreets = await fetchStreetsForNeighborhood(hood);
+    setStatusBar('active', `${hood.name} — ${hoodStreets.length} streets`);
+    if (document.getElementById('tab-map').classList.contains('active')) renderStreetLayers(hood);
+    matchAndSave(hood);
+  } catch(_) {
+    setStatusBar('active', 'Streets unavailable offline');
+  }
 }
 
 function setStatusBar(state, text) {
@@ -498,6 +586,16 @@ async function loadFriends() {
   }
 }
 
+// ── Stats cache ───────────────────────────────────────────────────────────
+let _serverStats = { streak: 0, distKm: 0, totalStreets: 0 };
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats', { headers: authHeaders() });
+    if (r.ok) { _serverStats = await r.json(); renderProfile(); }
+  } catch(_) {}
+}
+
 // ── Profile tab ───────────────────────────────────────────────────────────
 function renderProfile() {
   if (!currentUser) return;
@@ -515,25 +613,27 @@ function renderProfile() {
   av.textContent = initials(fullName.trim());
   av.style.cssText = avatarStyle(color);
 
-  // Stats
-  let totalStreets = 0, completedHoods = 0;
+  // Local counts (from cached street data)
+  let completedHoods = 0;
   const boroughCounts = {};
   for (const h of NYC_NEIGHBORHOODS) {
     const w      = walkedStreets[h.id] || new Set();
     const cached = streetCache[h.id] || loadStreetCache(h.id);
     const total  = cached ? cached.length : 0;
     if (w.size > 0) {
-      totalStreets += w.size;
       if (total > 0 && w.size === total) completedHoods++;
       boroughCounts[h.borough] = (boroughCounts[h.borough] || 0) + w.size;
     }
   }
 
+  const streakLabel = _serverStats.streak === 1 ? '1 day' : `${_serverStats.streak} days`;
+  const distLabel   = _serverStats.distKm >= 1 ? _serverStats.distKm.toFixed(1) + ' km' : Math.round(_serverStats.distKm * 1000) + ' m';
+
   document.getElementById('profile-stats').innerHTML = `
-    <div class="stat-card"><div class="icon">🏃</div><div class="num">${totalStreets}</div><div class="lbl">Streets Walked</div></div>
-    <div class="stat-card"><div class="icon">🏙️</div><div class="num">${completedHoods}</div><div class="lbl">Hoods Completed</div></div>
-    <div class="stat-card"><div class="icon">👥</div><div class="num">${friendsData.length}</div><div class="lbl">Friends</div></div>
-    <div class="stat-card"><div class="icon">🗺️</div><div class="num">${Object.keys(walkedStreets).filter(k => walkedStreets[k].size > 0).length}</div><div class="lbl">Neighborhoods</div></div>
+    <div class="stat-card"><div class="icon">🏃</div><div class="num">${_serverStats.totalStreets}</div><div class="lbl">Streets Walked</div></div>
+    <div class="stat-card"><div class="icon">🔥</div><div class="num">${_serverStats.streak}</div><div class="lbl">Day Streak</div></div>
+    <div class="stat-card"><div class="icon">📏</div><div class="num">${distLabel}</div><div class="lbl">Est. Distance</div></div>
+    <div class="stat-card"><div class="icon">🏙️</div><div class="num">${Object.keys(walkedStreets).filter(k => walkedStreets[k].size > 0).length}</div><div class="lbl">Neighborhoods</div></div>
   `;
 
   // Borough breakdown
@@ -550,7 +650,6 @@ function renderProfile() {
     </div>`;
   }
   document.getElementById('borough-breakdown').innerHTML = `<h3>By Borough</h3>${bars}`;
-  document.getElementById('profile-user-id').textContent = currentUser.id;
 
   updateStreetsBadge();
 }

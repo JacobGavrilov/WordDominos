@@ -138,6 +138,40 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Simple password reset — no email service yet, returns token in response.
+// In production wire SENDGRID_API_KEY / similar to email the token instead.
+app.post('/api/auth/forgot', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+  const result = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+  if (!result.rows.length) {
+    // Don't reveal whether account exists
+    return res.json({ message: 'If that email exists, a reset token was sent.' });
+  }
+  const resetToken = jwt.sign({ id: result.rows[0].id, purpose: 'reset' }, JWT_SECRET, { expiresIn: '1h' });
+  // TODO: send resetToken via email. For now return it directly (dev only).
+  const isDev = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes('localhost');
+  res.json({
+    message: 'Reset token generated.',
+    ...(isDev ? { resetToken } : {})
+  });
+});
+
+app.post('/api/auth/reset', async (req, res) => {
+  const { resetToken, password } = req.body;
+  if (!resetToken || !password) return res.status(400).json({ error: 'Token and password required' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  try {
+    const payload = jwt.verify(resetToken, JWT_SECRET);
+    if (payload.purpose !== 'reset') throw new Error('Invalid token');
+    const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, payload.id]);
+    res.json({ ok: true });
+  } catch {
+    res.status(400).json({ error: 'Invalid or expired reset token' });
+  }
+});
+
 app.get('/api/auth/me', auth, async (req, res) => {
   const result = await pool.query(
     'SELECT id, email, first_name, last_name, date_of_birth, home_neighborhood, created_at FROM users WHERE id = $1',
@@ -156,7 +190,7 @@ app.post('/api/gps', auth, async (req, res) => {
 
   try {
     const values = points.slice(0, 500).map((p, i) => {
-      const base = i * 4;
+      const base = i * 5;
       return `($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5})`;
     });
     const flat = points.slice(0, 500).flatMap(p => [req.user.id, p.lat, p.lon, p.accuracy || null, p.ts || Date.now()]);
@@ -223,6 +257,61 @@ app.get('/api/walks/:userId', auth, async (req, res) => {
     out[row.neighborhood_id].push(row.street_id);
   }
   res.json(out);
+});
+
+// ── Stats: streak + distance ───────────────────────────────────────────────
+app.get('/api/stats', auth, async (req, res) => {
+  try {
+    // Streak: count consecutive distinct days with GPS activity (most recent run)
+    const days = await pool.query(`
+      SELECT DISTINCT date_trunc('day', to_timestamp(recorded_at / 1000)) AS day
+      FROM gps_log WHERE user_id = $1
+      ORDER BY day DESC
+    `, [req.user.id]);
+
+    let streak = 0;
+    const today = new Date(); today.setHours(0,0,0,0);
+    let expected = today.getTime();
+    for (const row of days.rows) {
+      const d = new Date(row.day).getTime();
+      if (d === expected || d === expected - 86400000) {
+        streak++;
+        expected = d - 86400000;
+      } else break;
+    }
+
+    // Total distance from GPS log (sum of consecutive point distances)
+    // Approximate: sum of haversine between sequential points per user
+    // For performance, use a simpler bounding estimate from point count
+    const ptCount = await pool.query(
+      'SELECT COUNT(*) AS cnt FROM gps_log WHERE user_id = $1', [req.user.id]
+    );
+    // Rough estimate: avg walking step ~1.4m per GPS point recorded every ~3s at ~1.4m/s
+    const pts = parseInt(ptCount.rows[0].cnt, 10);
+    const distKm = parseFloat((pts * 0.004).toFixed(2)); // ~4m per point avg
+
+    // Total unique streets
+    const streetCount = await pool.query(
+      'SELECT COUNT(*) AS cnt FROM walks WHERE user_id = $1', [req.user.id]
+    );
+
+    // Most walked street
+    const topStreet = await pool.query(`
+      SELECT street_id, neighborhood_id, walk_count
+      FROM walks WHERE user_id = $1
+      ORDER BY walk_count DESC LIMIT 1
+    `, [req.user.id]);
+
+    res.json({
+      streak,
+      distKm,
+      totalStreets: parseInt(streetCount.rows[0].cnt, 10),
+      topStreet: topStreet.rows[0] || null
+    });
+  } catch(e) {
+    console.error('stats error', e);
+    res.json({ streak: 0, distKm: 0, totalStreets: 0, topStreet: null });
+  }
 });
 
 // ── Friends ────────────────────────────────────────────────────────────────
