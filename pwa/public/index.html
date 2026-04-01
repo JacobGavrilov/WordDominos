@@ -10,58 +10,72 @@
   <title>NYC Street Walker</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon-192.png">
-
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
 
-<!-- ═══════════════════════════════ SIGN IN ═══════════════════════════════ -->
-<div id="signin-screen" class="screen active">
-  <div class="signin-hero">
-    <div class="signin-icon">🗺️</div>
+<!-- ══════════════════════ AUTH SCREEN ══════════════════════ -->
+<div id="auth-screen" class="screen active">
+  <div class="auth-hero">
+    <div class="auth-icon">🗺️</div>
     <h1>NYC Street Walker</h1>
     <p>Track every street you've walked<br>across New York City</p>
   </div>
-  <div class="signin-form">
-    <input id="signin-name" type="text" placeholder="Your name" maxlength="30" autocomplete="name">
-    <button id="signin-btn" class="btn-primary">Get Started</button>
-    <p class="signin-hint">Already have an ID? <a href="#" id="show-login">Sign in with ID</a></p>
+
+  <div class="auth-tabs">
+    <button class="auth-tab active" id="tab-login-btn" onclick="showAuthTab('login')">Log In</button>
+    <button class="auth-tab" id="tab-signup-btn" onclick="showAuthTab('signup')">Sign Up</button>
   </div>
-  <div id="login-form" class="signin-form hidden">
-    <input id="login-id" type="text" placeholder="Paste your User ID" style="font-family:monospace;font-size:13px">
-    <button id="login-btn" class="btn-primary">Sign In</button>
+
+  <!-- LOGIN -->
+  <div id="login-panel" class="auth-form">
+    <input id="login-email" type="email" placeholder="Email" autocomplete="email">
+    <div class="pw-row">
+      <input id="login-password" type="password" placeholder="Password" autocomplete="current-password">
+      <button class="pw-toggle" onclick="togglePw('login-password')">👁</button>
+    </div>
+    <button class="btn-primary" onclick="doLogin()">Log In</button>
+    <p id="login-error" class="form-error hidden"></p>
+  </div>
+
+  <!-- SIGN UP -->
+  <div id="signup-panel" class="auth-form hidden">
+    <div class="name-row">
+      <input id="su-first" type="text" placeholder="First name" autocomplete="given-name">
+      <input id="su-last"  type="text" placeholder="Last name"  autocomplete="family-name">
+    </div>
+    <input id="su-email" type="email" placeholder="Email" autocomplete="email">
+    <div class="pw-row">
+      <input id="su-password" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password">
+      <button class="pw-toggle" onclick="togglePw('su-password')">👁</button>
+    </div>
+    <input id="su-dob" type="date" placeholder="Date of birth">
+    <label class="field-label">Home neighborhood</label>
+    <select id="su-neighborhood">
+      <option value="">Select your neighborhood</option>
+    </select>
+    <button class="btn-primary" onclick="doSignup()">Create Account</button>
+    <p id="signup-error" class="form-error hidden"></p>
   </div>
 </div>
 
-<!-- ═══════════════════════════════ MAIN APP ══════════════════════════════ -->
+<!-- ══════════════════════ MAIN APP ══════════════════════════ -->
 <div id="app" class="screen hidden">
+
+  <!-- Always-on status bar -->
+  <div id="status-bar" class="status-bar">
+    <span id="status-dot" class="status-dot inactive"></span>
+    <span id="status-text">Locating…</span>
+    <span id="status-streets" class="status-streets hidden"></span>
+  </div>
 
   <!-- TAB: MAP -->
   <div id="tab-map" class="tab-content active">
     <div id="map"></div>
-
-    <!-- Tracking bar -->
-    <div id="tracking-bar" class="tracking-bar hidden">
-      <span class="recording-dot"></span>
-      <span id="track-duration">0:00</span>
-      <span class="sep">·</span>
-      <span id="track-distance">0.0 km</span>
-      <span class="sep">·</span>
-      <span id="track-streets">0 streets</span>
-    </div>
-
-    <!-- Start/Stop button -->
-    <button id="walk-btn" class="walk-btn">
-      <span id="walk-icon">🚶</span>
-      <span id="walk-label">Start Walk</span>
-    </button>
-
-    <!-- Neighborhood load button -->
     <div id="map-hood-panel" class="map-hood-panel hidden">
       <span id="map-hood-name"></span>
-      <button id="map-hood-load" class="btn-small">Load Streets</button>
+      <button id="map-hood-load" class="btn-small" onclick="loadCurrentHoodOnMap()">Load Streets</button>
     </div>
   </div>
 
@@ -69,7 +83,7 @@
   <div id="tab-neighborhoods" class="tab-content hidden">
     <div class="tab-header">
       <h2>Neighborhoods</h2>
-      <select id="borough-filter">
+      <select id="borough-filter" onchange="renderNeighborhoodList()">
         <option value="">All Boroughs</option>
         <option value="Manhattan">Manhattan</option>
         <option value="Brooklyn">Brooklyn</option>
@@ -81,17 +95,17 @@
     <div id="neighborhood-list" class="list-container"></div>
   </div>
 
-  <!-- TAB: NEIGHBORHOOD DETAIL (hidden panel) -->
+  <!-- TAB: NEIGHBORHOOD DETAIL -->
   <div id="tab-hood-detail" class="tab-content hidden">
     <div class="detail-header">
       <button class="back-btn" onclick="showNeighborhoods()">← Back</button>
       <h2 id="detail-hood-name"></h2>
     </div>
     <div class="progress-summary" id="detail-summary"></div>
-    <div class="filter-tabs" id="street-filter-tabs">
-      <button class="filter-tab active" data-filter="all" onclick="filterStreets('all',this)">All</button>
-      <button class="filter-tab" data-filter="walked" onclick="filterStreets('walked',this)">Walked</button>
-      <button class="filter-tab" data-filter="unwalked" onclick="filterStreets('unwalked',this)">Not Walked</button>
+    <div class="filter-tabs">
+      <button class="filter-tab active" data-filter="all"      onclick="filterStreets('all',this)">All</button>
+      <button class="filter-tab"        data-filter="walked"   onclick="filterStreets('walked',this)">Walked</button>
+      <button class="filter-tab"        data-filter="unwalked" onclick="filterStreets('unwalked',this)">Not Yet</button>
     </div>
     <div id="street-list" class="list-container"></div>
   </div>
@@ -103,11 +117,9 @@
       <button class="btn-small" onclick="showAddFriend()">+ Add</button>
     </div>
     <div id="friends-list" class="list-container"></div>
-
-    <!-- Add friend panel -->
     <div id="add-friend-panel" class="bottom-panel hidden">
       <h3>Add a Friend</h3>
-      <p class="hint">Share your ID with friends, or paste theirs below.</p>
+      <p class="hint">Share your ID with friends or paste theirs below.</p>
       <div class="your-id-box">
         <label>Your ID</label>
         <div class="id-row">
@@ -127,7 +139,7 @@
       <div id="profile-avatar" class="avatar-large"></div>
       <div>
         <h2 id="profile-name"></h2>
-        <p id="profile-joined" class="hint"></p>
+        <p id="profile-hood" class="hint"></p>
       </div>
     </div>
     <div class="stats-grid" id="profile-stats"></div>
@@ -146,25 +158,15 @@
 
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav">
-    <button class="nav-btn active" onclick="switchTab('map',this)">
-      <span>🗺️</span><span>Map</span>
-    </button>
-    <button class="nav-btn" onclick="switchTab('neighborhoods',this)">
-      <span>🏙️</span><span>Neighborhoods</span>
-    </button>
-    <button class="nav-btn" onclick="switchTab('friends',this)">
-      <span>👥</span><span>Friends</span>
-    </button>
-    <button class="nav-btn" onclick="switchTab('profile',this)">
-      <span>👤</span><span>Profile</span>
-    </button>
+    <button class="nav-btn active" onclick="switchTab('map',this)"><span>🗺️</span><span>Map</span></button>
+    <button class="nav-btn" onclick="switchTab('neighborhoods',this)"><span>🏙️</span><span>Neighborhoods</span></button>
+    <button class="nav-btn" onclick="switchTab('friends',this)"><span>👥</span><span>Friends</span></button>
+    <button class="nav-btn" onclick="switchTab('profile',this)"><span>👤</span><span>Profile</span></button>
   </nav>
 </div>
 
-<!-- Toast -->
 <div id="toast" class="toast hidden"></div>
 
-<!-- Scripts -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/js/neighborhoods.js"></script>
 <script src="/js/streets.js"></script>
