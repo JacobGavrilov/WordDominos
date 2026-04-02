@@ -6,6 +6,129 @@ const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 // Cache streets in memory by neighborhood id
 const streetCache = {};
 
+// ── Movement classifier ───────────────────────────────────────────────────
+// Filters out cars, buses, and above-ground subway from street tracking.
+// Underground subway self-filters because GPS dies underground.
+//
+// Speed thresholds:
+//   ≤ 2.5 m/s  (~9 km/h)  → walking / slow jog
+//   ≤ 5.0 m/s  (~18 km/h) → uncertain (fast jog, slow gridlock, GPS noise)
+//   >  5.0 m/s            → vehicle / above-ground transit
+//
+// State machine:
+//   walking      → streets count
+//   uncertain    → streets don't count, but no penalty; quick return to walking
+//   vehicle      → streets don't count; triggered after VEHICLE_CONFIRM_PTS
+//                  consecutive fast points (avoids false positives from GPS spikes)
+//   requalifying → was vehicle, back to walk speed; must hold REQUALIFY_MS
+//                  before streets count again (handles traffic lights, slow traffic)
+
+const WALK_SPEED_MS       = 2.5;   // m/s
+const UNCERTAIN_SPEED_MS  = 5.0;   // m/s
+const VEHICLE_CONFIRM_PTS = 4;     // consecutive fast points to enter vehicle state
+const REQUALIFY_MS        = 45000; // ms of walking needed to exit requalifying
+
+const movement = {
+  state:              'unknown',   // 'unknown'|'walking'|'uncertain'|'vehicle'|'requalifying'
+  fastStreak:         0,           // consecutive fast points
+  requalifyStart:     null,        // timestamp when requalify phase started
+  lastPoint:          null,        // { lat, lon, ts }
+  lastSpeedMs:        0,
+
+  // Call with each new GPS point. Returns true if this point should count for walking.
+  update(lat, lon, ts) {
+    if (!this.lastPoint) {
+      this.lastPoint = { lat, lon, ts };
+      this.state = 'unknown';
+      return false;
+    }
+
+    const dt   = (ts - this.lastPoint.ts) / 1000; // seconds
+    const dist = haversine(this.lastPoint.lat, this.lastPoint.lon, lat, lon);
+    const speed = dt > 0 ? dist / dt : 0; // m/s
+    this.lastSpeedMs = speed;
+    this.lastPoint   = { lat, lon, ts };
+
+    const classification =
+      speed <= WALK_SPEED_MS      ? 'walking'   :
+      speed <= UNCERTAIN_SPEED_MS ? 'uncertain' : 'vehicle';
+
+    // Transition logic
+    switch (this.state) {
+      case 'unknown':
+      case 'walking':
+        if (classification === 'vehicle') {
+          this.fastStreak++;
+          if (this.fastStreak >= VEHICLE_CONFIRM_PTS) {
+            this.state      = 'vehicle';
+            this.fastStreak = 0;
+          }
+          // In the meantime stay walking/unknown — don't penalise one GPS spike
+        } else if (classification === 'uncertain') {
+          this.fastStreak = Math.min(this.fastStreak + 0.5, VEHICLE_CONFIRM_PTS);
+          this.state = 'uncertain';
+        } else {
+          this.fastStreak = Math.max(0, this.fastStreak - 1);
+          this.state = 'walking';
+        }
+        break;
+
+      case 'uncertain':
+        if (classification === 'vehicle') {
+          this.fastStreak++;
+          if (this.fastStreak >= VEHICLE_CONFIRM_PTS) {
+            this.state = 'vehicle'; this.fastStreak = 0;
+          }
+        } else if (classification === 'walking') {
+          this.fastStreak = Math.max(0, this.fastStreak - 1);
+          this.state = 'walking';
+        }
+        break;
+
+      case 'vehicle':
+        if (classification === 'walking') {
+          this.state          = 'requalifying';
+          this.requalifyStart = ts;
+          this.fastStreak     = 0;
+        }
+        // If still fast, stay in vehicle
+        break;
+
+      case 'requalifying':
+        if (classification !== 'walking') {
+          // Sped up again — back to vehicle
+          this.state          = 'vehicle';
+          this.requalifyStart = null;
+        } else if (ts - this.requalifyStart >= REQUALIFY_MS) {
+          // Held walking speed long enough — cleared!
+          this.state          = 'walking';
+          this.requalifyStart = null;
+        }
+        break;
+    }
+
+    return this.isWalking();
+  },
+
+  isWalking() {
+    return this.state === 'walking' || this.state === 'unknown';
+  },
+
+  // Human-readable label for the status bar
+  statusLabel() {
+    switch (this.state) {
+      case 'walking':      return null; // let caller show accuracy instead
+      case 'uncertain':    return '🚶 Checking speed…';
+      case 'vehicle':      return '🚗 Too fast — paused';
+      case 'requalifying': {
+        const remaining = Math.ceil((REQUALIFY_MS - (Date.now() - this.requalifyStart)) / 1000);
+        return `⏳ Resuming in ${remaining}s`;
+      }
+      default: return null;
+    }
+  }
+};
+
 async function fetchStreetsForNeighborhood(hood) {
   if (streetCache[hood.id]) return streetCache[hood.id];
 

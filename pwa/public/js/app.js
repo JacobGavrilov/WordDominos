@@ -225,36 +225,66 @@ function startAutoTracking() {
   );
 }
 
+// Refresh the requalifying countdown every second so the status bar ticks down
+let _requalifyInterval = null;
+
 function onGpsPoint(pos) {
   const { latitude: lat, longitude: lon, accuracy } = pos.coords;
-  if (accuracy > 40) return; // skip inaccurate fixes
+  if (accuracy > 40) return; // skip inaccurate GPS fixes
 
-  setStatusBar('active', `${Math.round(accuracy)}m accuracy`);
+  const ts        = Date.now();
+  const canWalk   = movement.update(lat, lon, ts);
+  const stateLabel = movement.statusLabel();
+
+  // Always harvest GPS for data (even when in vehicle/subway)
   bufferGpsPoint(lat, lon, accuracy);
 
-  const pt = [lat, lon];
-  gpsTrack.push(pt);
-
-  // Keep track to last 500 points (~2-3km of walking)
-  if (gpsTrack.length > 500) gpsTrack.shift();
-
-  // Pan map if on map tab
-  if (document.getElementById('tab-map').classList.contains('active')) {
-    if (map) map.setView(pt, Math.max(map.getZoom(), 16), { animate: true });
+  // Status bar
+  if (stateLabel) {
+    setStatusBar(movement.state === 'vehicle' ? 'vehicle' : 'uncertain', stateLabel);
+    // Tick the requalifying countdown every second
+    if (movement.state === 'requalifying' && !_requalifyInterval) {
+      _requalifyInterval = setInterval(() => {
+        if (movement.state === 'requalifying') {
+          setStatusBar('uncertain', movement.statusLabel());
+        } else {
+          clearInterval(_requalifyInterval);
+          _requalifyInterval = null;
+        }
+      }, 1000);
+    }
+  } else {
+    if (_requalifyInterval) { clearInterval(_requalifyInterval); _requalifyInterval = null; }
+    setStatusBar('active', `${Math.round(accuracy)}m · ${(movement.lastSpeedMs * 3.6).toFixed(1)} km/h`);
   }
 
-  // Check current neighborhood
-  const hood = hoodForCoords(lat, lon);
-  if (hood) {
-    const enteredNewHood = !currentHood || currentHood.id !== hood.id;
-    currentHood = hood;
-    updateMapHoodPanel(hood);
+  // Only add to walk track when actually on foot
+  if (canWalk) {
+    const pt = [lat, lon];
+    gpsTrack.push(pt);
+    if (gpsTrack.length > 500) gpsTrack.shift();
 
-    if (enteredNewHood) {
-      // Auto-load streets for this hood silently in the background
-      autoLoadHoodStreets(hood);
-    } else if (hoodStreets.length && hoodStreets[0].neighborhoodId === hood.id) {
-      matchAndSave(hood);
+    // Pan map
+    if (document.getElementById('tab-map').classList.contains('active')) {
+      if (map) map.setView(pt, Math.max(map.getZoom(), 16), { animate: true });
+    }
+
+    // Neighborhood + street matching
+    const hood = hoodForCoords(lat, lon);
+    if (hood) {
+      const enteredNewHood = !currentHood || currentHood.id !== hood.id;
+      currentHood = hood;
+      updateMapHoodPanel(hood);
+      if (enteredNewHood) {
+        autoLoadHoodStreets(hood);
+      } else if (hoodStreets.length && hoodStreets[0].neighborhoodId === hood.id) {
+        matchAndSave(hood);
+      }
+    }
+  } else {
+    // Still pan map even when in vehicle so the user can see where they are
+    if (document.getElementById('tab-map').classList.contains('active')) {
+      if (map) map.panTo([lat, lon], { animate: true });
     }
   }
 }
@@ -289,8 +319,9 @@ async function autoLoadHoodStreets(hood) {
 }
 
 function setStatusBar(state, text) {
-  const dot  = document.getElementById('status-dot');
-  const txt  = document.getElementById('status-text');
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  // state: 'active' (walking, green) | 'uncertain' (yellow) | 'vehicle' (red) | 'inactive' (gray)
   dot.className = 'status-dot ' + state;
   txt.textContent = text;
 }
