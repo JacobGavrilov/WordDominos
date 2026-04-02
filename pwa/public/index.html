@@ -127,6 +127,9 @@
         <option value="Staten Island">Staten Island</option>
       </select>
     </div>
+    <div class="hood-search-wrap">
+      <input id="hood-search" type="search" placeholder="🔍  Search neighborhoods…" oninput="renderNeighborhoodList()" autocomplete="off">
+    </div>
     <div id="neighborhood-list" class="list-container"></div>
   </div>
 
@@ -219,6 +222,14 @@
       </div>
     </div>
     <div class="stats-grid" id="profile-stats"></div>
+    <div id="weekly-stats" class="weekly-stats"></div>
+    <div class="badges-section" id="meta-badges-section">
+      <div class="badges-header">
+        <span>Achievements</span>
+        <span id="meta-badges-count" class="badges-count"></span>
+      </div>
+      <div id="meta-badges-grid" class="badges-grid meta-badges-grid"></div>
+    </div>
     <div class="badges-section" id="badges-section">
       <div class="badges-header">
         <span>Neighborhood Badges</span>
@@ -249,6 +260,20 @@
 </div>
 
 <div id="toast" class="toast hidden"></div>
+
+<!-- ══════════════════════ ONBOARDING OVERLAY ══════════════════════ -->
+<div id="onboarding-overlay" class="onboarding-overlay hidden">
+  <div class="onboarding-card">
+    <div id="onboarding-steps">
+      <!-- steps injected by JS -->
+    </div>
+    <div class="onboarding-dots" id="onboarding-dots"></div>
+    <div class="onboarding-nav">
+      <button id="ob-skip" class="btn-ghost" onclick="closeOnboarding()">Skip</button>
+      <button id="ob-next" class="btn-primary" onclick="onboardingNext()">Next →</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/js/neighborhoods.js"></script>

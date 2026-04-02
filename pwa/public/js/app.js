@@ -3,6 +3,7 @@
 let map         = null;
 let currentUser = null;   // { id, firstName, lastName, homeNeighborhood, email }
 let walkedStreets = {};   // { neighborhoodId: Set<streetId> }
+let streetMeta    = {};   // { streetId: { walkCount, firstWalked } }
 let friendsData   = [];
 let friendWalked  = {};   // { friendId: Set<streetId> }
 let currentHood   = null;
@@ -12,6 +13,7 @@ let streetFilter  = 'all';
 let watchId       = null;
 let gpsTrack      = [];   // GPS points for current session
 let sessionNewStreets = 0;
+let _metaBadges   = null; // cached meta badge data
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
@@ -186,11 +188,14 @@ async function bootApp() {
   showScreen('app');
 
   // Load walked streets
-  const raw = await apiGetWalkedStreets().catch(() => ({}));
+  const rawData = await apiGetWalkedStreets().catch(() => ({}));
   walkedStreets = {};
-  for (const [hid, ids] of Object.entries(raw)) {
+  streetMeta = {};
+  const rawWalks = rawData.walks || rawData; // handle old flat format
+  for (const [hid, ids] of Object.entries(rawWalks)) {
     walkedStreets[hid] = new Set(ids);
   }
+  if (rawData.meta) Object.assign(streetMeta, rawData.meta);
 
   initMap();
   renderNeighborhoodList();
@@ -200,6 +205,11 @@ async function bootApp() {
   loadBadges();
   startAutoTracking();
   checkInviteInURL();
+
+  // Show onboarding for first-time users
+  if (!localStorage.getItem('onboarded')) {
+    setTimeout(showOnboarding, 800);
+  }
 }
 
 // ── Screen helper ─────────────────────────────────────────────────────────
@@ -434,11 +444,19 @@ function renderStreetLayers(hood) {
     const weight  = walkedByMe || friendColorVal ? 5 : 2;
     const opacity = walkedByMe || friendColorVal ? 0.9 : 0.3;
 
-    const popup = walkedByMe
-      ? `<b>${street.name}</b><br>✅ You walked this`
-      : friendColorVal
-        ? `<b>${street.name}</b><br>👤 Friend walked this`
-        : `<b>${street.name}</b>`;
+    let popup;
+    if (walkedByMe) {
+      const sm = streetMeta[street.id];
+      const dateStr = sm && sm.firstWalked ? new Date(sm.firstWalked).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
+      const countStr = sm && sm.walkCount > 1 ? `${sm.walkCount}×` : null;
+      popup = `<b>${street.name}</b><br>✅ You walked this` +
+        (dateStr ? `<br>First: ${dateStr}` : '') +
+        (countStr ? `<br>Times: ${countStr}` : '');
+    } else if (friendColorVal) {
+      popup = `<b>${street.name}</b><br>👤 Friend walked this`;
+    } else {
+      popup = `<b>${street.name}</b>`;
+    }
 
     const line = L.polyline(street.coords, { color, weight, opacity })
       .bindPopup(popup)
@@ -461,10 +479,13 @@ function refreshStreetLayer(streetId, hoodId) {
 // ── Neighborhoods tab ─────────────────────────────────────────────────────
 function renderNeighborhoodList() {
   const boroughFilter = document.getElementById('borough-filter').value;
+  const searchEl      = document.getElementById('hood-search');
+  const searchTerm    = searchEl ? searchEl.value.trim().toLowerCase() : '';
   const container     = document.getElementById('neighborhood-list');
-  const filtered      = boroughFilter
+  let filtered        = boroughFilter
     ? NYC_NEIGHBORHOODS.filter(h => h.borough === boroughFilter)
     : NYC_NEIGHBORHOODS;
+  if (searchTerm) filtered = filtered.filter(h => h.name.toLowerCase().includes(searchTerm));
 
   const grouped = {};
   for (const h of filtered) {
@@ -772,8 +793,13 @@ let _earnedBadges = {}; // { neighborhoodId: walkedCount }
 
 async function loadBadges() {
   try {
-    _earnedBadges = await fetch(`/api/badges/${getCurrentUserId()}`, { headers: authHeaders() }).then(r => r.json());
+    [_earnedBadges, _metaBadges] = await Promise.all([
+      fetch(`/api/badges/${getCurrentUserId()}`, { headers: authHeaders() }).then(r => r.json()),
+      fetch('/api/badges/meta', { headers: authHeaders() }).then(r => r.json())
+    ]);
     renderBadges();
+    renderMetaBadges();
+    renderWeeklyStats();
   } catch { renderBadges(); }
 }
 
@@ -815,6 +841,58 @@ function renderBadges() {
       badge.classList.toggle('hidden', !(total > 0 && walked >= total));
     }
   }
+}
+
+// ── Meta achievement badges ───────────────────────────────────────────────
+
+const META_BADGES = [
+  { id: 'first_steps',   emoji: '👣', name: 'First Steps',       desc: 'Walk your first street',        check: m => m.totalStreets >= 1 },
+  { id: 'explorer_50',   emoji: '🗺️', name: 'Explorer',           desc: '50 streets walked',             check: m => m.totalStreets >= 50 },
+  { id: 'wanderer_200',  emoji: '🧭', name: 'City Wanderer',      desc: '200 streets walked',            check: m => m.totalStreets >= 200 },
+  { id: 'veteran_500',   emoji: '🏆', name: 'Street Veteran',     desc: '500 streets walked',            check: m => m.totalStreets >= 500 },
+  { id: 'master_1000',   emoji: '👑', name: 'NYC Master',         desc: '1,000 streets walked',          check: m => m.totalStreets >= 1000 },
+  { id: 'streak_3',      emoji: '🔥', name: 'On a Roll',          desc: '3-day walking streak',          check: m => m.streak >= 3 },
+  { id: 'streak_7',      emoji: '⚡', name: 'Week Warrior',       desc: '7-day walking streak',          check: m => m.streak >= 7 },
+  { id: 'streak_30',     emoji: '💎', name: 'Unstoppable',        desc: '30-day walking streak',         check: m => m.streak >= 30 },
+  { id: 'all_boroughs',  emoji: '🗽', name: 'Five Boroughs',      desc: 'Walk in all 5 boroughs',        check: m => {
+    const boroughs = new Set(NYC_NEIGHBORHOODS.filter(h => (m.walkedHoods||[]).includes(h.id)).map(h=>h.borough));
+    return boroughs.size >= 5;
+  }},
+  { id: 'hoods_5',       emoji: '🏙️', name: 'Neighborhood Hopper', desc: 'Walk in 5 neighborhoods',     check: m => (m.walkedHoods||[]).length >= 5 },
+  { id: 'hoods_15',      emoji: '🌆', name: 'District Dweller',   desc: 'Walk in 15 neighborhoods',     check: m => (m.walkedHoods||[]).length >= 15 },
+  { id: 'hoods_30',      emoji: '🌇', name: 'City Native',        desc: 'Walk in 30 neighborhoods',     check: m => (m.walkedHoods||[]).length >= 30 },
+];
+
+function renderMetaBadges() {
+  const grid = document.getElementById('meta-badges-grid');
+  if (!grid || !_metaBadges) return;
+
+  const earnedCount = META_BADGES.filter(b => b.check(_metaBadges)).length;
+  const countEl = document.getElementById('meta-badges-count');
+  if (countEl) countEl.textContent = `${earnedCount} / ${META_BADGES.length}`;
+
+  grid.innerHTML = META_BADGES.map(b => {
+    const earned = b.check(_metaBadges);
+    return `
+    <div class="badge-item meta-badge ${earned ? 'earned' : 'locked'}" title="${b.name}: ${b.desc}">
+      <div class="badge-emoji">${earned ? b.emoji : '🔒'}</div>
+      <div class="badge-name">${b.name}</div>
+      <div class="badge-desc">${b.desc}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderWeeklyStats() {
+  const el = document.getElementById('weekly-stats');
+  if (!el || !_metaBadges) return;
+  const { weeklyStreets, daysThisWeek, streak } = _metaBadges;
+  el.innerHTML = `
+    <div class="weekly-header">This Week</div>
+    <div class="weekly-grid">
+      <div class="weekly-item"><div class="weekly-num">${weeklyStreets || 0}</div><div class="weekly-lbl">New Streets</div></div>
+      <div class="weekly-item"><div class="weekly-num">${daysThisWeek || 0}</div><div class="weekly-lbl">Days Active</div></div>
+      <div class="weekly-item"><div class="weekly-num">${streak || 0}</div><div class="weekly-lbl">Day Streak 🔥</div></div>
+    </div>`;
 }
 
 // ── Incomplete streets map mode ───────────────────────────────────────────
@@ -935,4 +1013,78 @@ function showToast(msg) {
   t.classList.remove('hidden');
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => t.classList.add('hidden'), 2800);
+}
+
+// ── Onboarding overlay ────────────────────────────────────────────────────
+
+const ONBOARDING_STEPS = [
+  {
+    emoji: '🗺️',
+    title: 'Welcome to NYC Street Walker',
+    body:  'Track every street you walk across New York City. Your progress is saved automatically — no buttons needed.'
+  },
+  {
+    emoji: '📍',
+    title: 'Always-On Tracking',
+    body:  'The app tracks your walk automatically using GPS. The green dot means you\'re being tracked. Red means you\'re moving too fast (vehicle). Yellow means uncertain.'
+  },
+  {
+    emoji: '🏙️',
+    title: 'Neighborhoods',
+    body:  'Explore 55 NYC neighborhoods. Tap any neighborhood to see which streets you\'ve walked and which ones are left.'
+  },
+  {
+    emoji: '🔥',
+    title: 'Community Heat Map',
+    body:  'Tap the 🔥 button on the map to see the most-walked streets across all users. Hot streets glow orange.'
+  },
+  {
+    emoji: '👥',
+    title: 'Walk with Friends',
+    body:  'Tap Friends → + Invite to share a link. When a friend opens it, you\'re automatically connected and can see each other\'s streets.'
+  }
+];
+
+let _obStep = 0;
+
+function showOnboarding() {
+  _obStep = 0;
+  renderOnboardingStep();
+  document.getElementById('onboarding-overlay').classList.remove('hidden');
+}
+
+function closeOnboarding() {
+  document.getElementById('onboarding-overlay').classList.add('hidden');
+  localStorage.setItem('onboarded', '1');
+}
+
+function onboardingNext() {
+  if (_obStep < ONBOARDING_STEPS.length - 1) {
+    _obStep++;
+    renderOnboardingStep();
+  } else {
+    closeOnboarding();
+  }
+}
+
+function renderOnboardingStep() {
+  const step  = ONBOARDING_STEPS[_obStep];
+  const total = ONBOARDING_STEPS.length;
+
+  document.getElementById('onboarding-steps').innerHTML = `
+    <div class="ob-step">
+      <div class="ob-emoji">${step.emoji}</div>
+      <h2 class="ob-title">${step.title}</h2>
+      <p class="ob-body">${step.body}</p>
+    </div>`;
+
+  document.getElementById('onboarding-dots').innerHTML =
+    Array.from({length: total}, (_, i) =>
+      `<span class="ob-dot ${i === _obStep ? 'active' : ''}"></span>`
+    ).join('');
+
+  document.getElementById('ob-next').textContent =
+    _obStep === total - 1 ? 'Get Started 🚶' : 'Next →';
+  document.getElementById('ob-skip').style.display =
+    _obStep === total - 1 ? 'none' : '';
 }

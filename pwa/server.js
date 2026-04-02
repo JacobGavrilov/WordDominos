@@ -234,15 +234,17 @@ app.post('/api/walks', auth, async (req, res) => {
 // Returns { neighborhoodId: [streetId, ...] }
 app.get('/api/walks', auth, async (req, res) => {
   const rows = await pool.query(
-    'SELECT neighborhood_id, street_id FROM walks WHERE user_id = $1',
+    'SELECT neighborhood_id, street_id, walk_count, first_walked FROM walks WHERE user_id = $1',
     [req.user.id]
   );
   const out = {};
+  const meta = {}; // streetId → { walkCount, firstWalked }
   for (const row of rows.rows) {
     if (!out[row.neighborhood_id]) out[row.neighborhood_id] = [];
     out[row.neighborhood_id].push(row.street_id);
+    meta[row.street_id] = { walkCount: parseInt(row.walk_count, 10), firstWalked: parseInt(row.first_walked, 10) };
   }
-  res.json(out);
+  res.json({ walks: out, meta });
 });
 
 // Walk data for a specific user (for friend views)
@@ -472,6 +474,74 @@ app.get('/api/badges/:userId', auth, async (req, res) => {
     res.json(out);
   } catch(e) {
     res.json({});
+  }
+});
+
+// ── Meta achievement badges ────────────────────────────────────────────────
+app.get('/api/badges/meta', auth, async (req, res) => {
+  try {
+    const uid = req.user.id;
+
+    // Total unique streets ever
+    const totalQ = await pool.query(
+      'SELECT COUNT(*) AS cnt FROM walks WHERE user_id = $1', [uid]
+    );
+    const totalStreets = parseInt(totalQ.rows[0].cnt, 10);
+
+    // Distinct boroughs walked (using neighborhood_id prefix logic on client)
+    // We need all neighborhood_ids walked
+    const hoodQ = await pool.query(
+      'SELECT DISTINCT neighborhood_id FROM walks WHERE user_id = $1', [uid]
+    );
+    const walkedHoods = hoodQ.rows.map(r => r.neighborhood_id);
+
+    // First walked date
+    const firstQ = await pool.query(
+      'SELECT MIN(first_walked) AS first FROM walks WHERE user_id = $1', [uid]
+    );
+    const firstWalked = parseInt(firstQ.rows[0].first, 10) || null;
+
+    // Streak (reuse logic from /api/stats)
+    const days = await pool.query(`
+      SELECT DISTINCT date_trunc('day', to_timestamp(recorded_at / 1000)) AS day
+      FROM gps_log WHERE user_id = $1 ORDER BY day DESC
+    `, [uid]);
+    let streak = 0;
+    const today = new Date(); today.setHours(0,0,0,0);
+    let expected = today.getTime();
+    for (const row of days.rows) {
+      const d = new Date(row.day).getTime();
+      if (d === expected || d === expected - 86400000) { streak++; expected = d - 86400000; }
+      else break;
+    }
+
+    // Weekly new streets (since last Monday)
+    const monday = new Date(); monday.setHours(0,0,0,0);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const weeklyQ = await pool.query(
+      'SELECT COUNT(*) AS cnt FROM walks WHERE user_id = $1 AND first_walked >= $2',
+      [uid, monday.getTime()]
+    );
+    const weeklyStreets = parseInt(weeklyQ.rows[0].cnt, 10);
+
+    // Days walked this week
+    const daysWeekQ = await pool.query(`
+      SELECT COUNT(DISTINCT date_trunc('day', to_timestamp(recorded_at / 1000))) AS cnt
+      FROM gps_log WHERE user_id = $1 AND recorded_at >= $2
+    `, [uid, monday.getTime()]);
+    const daysThisWeek = parseInt(daysWeekQ.rows[0].cnt, 10);
+
+    res.json({
+      totalStreets,
+      walkedHoods,
+      firstWalked,
+      streak,
+      weeklyStreets,
+      daysThisWeek
+    });
+  } catch(e) {
+    console.error('meta badges error', e);
+    res.json({ totalStreets: 0, walkedHoods: [], firstWalked: null, streak: 0, weeklyStreets: 0, daysThisWeek: 0 });
   }
 });
 

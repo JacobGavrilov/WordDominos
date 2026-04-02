@@ -319,3 +319,37 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); }
 .lb-name { font-size: 14px; font-weight: 600; }
 .lb-sub  { font-size: 12px; color: var(--text2); }
 .lb-count { font-size: 20px; font-weight: 700; color: var(--green); }
+
+/* ── Neighborhood search ── */
+.hood-search-wrap { padding: 0 14px 6px; }
+.hood-search-wrap input { width: 100%; background: var(--surface); border: 1px solid var(--surface2); border-radius: 12px; color: var(--text); font-size: 14px; padding: 10px 14px; box-sizing: border-box; outline: none; }
+.hood-search-wrap input:focus { border-color: var(--green); }
+
+/* ── Weekly stats card ── */
+.weekly-stats { margin: 0 14px 10px; background: var(--surface); border-radius: 16px; padding: 14px; border: 1px solid var(--surface2); }
+.weekly-header { font-size: 13px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+.weekly-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.weekly-item { text-align: center; }
+.weekly-num { font-size: 24px; font-weight: 700; color: var(--text); line-height: 1; }
+.weekly-lbl { font-size: 11px; color: var(--text2); margin-top: 3px; }
+
+/* ── Meta achievement badges ── */
+.meta-badges-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-bottom: 16px; }
+.meta-badge { display: flex; flex-direction: column; align-items: center; }
+.meta-badge .badge-desc { font-size: 9px; color: var(--text2); line-height: 1.2; margin-top: 2px; text-align: center; }
+.meta-badge.earned .badge-desc { color: rgba(34,197,94,0.7); }
+
+/* ── Onboarding overlay ── */
+.onboarding-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(6px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.onboarding-overlay.hidden { display: none; }
+.onboarding-card { background: var(--surface); border-radius: 24px; padding: 32px 24px 24px; max-width: 360px; width: 100%; border: 1px solid var(--surface2); box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+.ob-step { text-align: center; min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ob-emoji { font-size: 56px; margin-bottom: 16px; }
+.ob-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+.ob-body { font-size: 14px; color: var(--text2); line-height: 1.55; }
+.onboarding-dots { display: flex; justify-content: center; gap: 6px; margin: 20px 0 16px; }
+.ob-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--surface2); transition: background 0.2s; }
+.ob-dot.active { background: var(--green); }
+.onboarding-nav { display: flex; gap: 10px; }
+.onboarding-nav .btn-ghost { flex: 0 0 auto; }
+.onboarding-nav .btn-primary { flex: 1; }
