@@ -284,7 +284,10 @@ function showFriendsSubTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('friends-list').classList.toggle('hidden', tab !== 'friends');
   document.getElementById('activity-feed').classList.toggle('hidden', tab !== 'activity');
+  const lb = document.getElementById('leaderboard-tab');
+  if (lb) lb.classList.toggle('hidden', tab !== 'leaderboard');
   if (tab === 'activity') renderActivityFeed();
+  if (tab === 'leaderboard') renderLeaderboard();
 }
 
 // ── Friend detail view ────────────────────────────────────────────────────

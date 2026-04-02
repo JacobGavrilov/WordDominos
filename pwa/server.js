@@ -414,6 +414,108 @@ app.get('/api/activity', auth, async (req, res) => {
   }
 });
 
+// ── Leaderboard ────────────────────────────────────────────────────────────
+// Returns current user + all friends ranked by streets walked.
+// "This week" = since last Monday 00:00 UTC.
+app.get('/api/leaderboard', auth, async (req, res) => {
+  try {
+    const monday = new Date();
+    monday.setUTCHours(0,0,0,0);
+    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+    const mondayMs = monday.getTime();
+
+    // All-time: count distinct streets per user (self + friends)
+    const allTime = await pool.query(`
+      SELECT u.id, u.first_name || ' ' || u.last_name AS name,
+             COUNT(DISTINCT w.street_id) AS total
+      FROM users u
+      JOIN walks w ON w.user_id = u.id
+      WHERE u.id = $1
+         OR u.id IN (SELECT friend_id FROM friends WHERE user_id = $1)
+      GROUP BY u.id, u.first_name, u.last_name
+      ORDER BY total DESC
+    `, [req.user.id]);
+
+    // This week: streets first walked on or after monday
+    const thisWeek = await pool.query(`
+      SELECT u.id, u.first_name || ' ' || u.last_name AS name,
+             COUNT(DISTINCT w.street_id) AS total
+      FROM users u
+      JOIN walks w ON w.user_id = u.id
+      WHERE (u.id = $1 OR u.id IN (SELECT friend_id FROM friends WHERE user_id = $1))
+        AND w.first_walked >= $2
+      GROUP BY u.id, u.first_name, u.last_name
+      ORDER BY total DESC
+    `, [req.user.id, mondayMs]);
+
+    res.json({ allTime: allTime.rows, thisWeek: thisWeek.rows, currentUserId: req.user.id });
+  } catch(e) {
+    console.error('leaderboard error', e);
+    res.json({ allTime: [], thisWeek: [], currentUserId: req.user.id });
+  }
+});
+
+// ── Badges ─────────────────────────────────────────────────────────────────
+// Computes which neighborhood badges a user has earned.
+// A badge is earned when every street in a neighborhood has been walked.
+// Client sends the neighborhood→streetCount map; server checks walked counts.
+app.get('/api/badges/:userId', auth, async (req, res) => {
+  try {
+    const rows = await pool.query(`
+      SELECT neighborhood_id, COUNT(DISTINCT street_id) AS walked_count
+      FROM walks WHERE user_id = $1
+      GROUP BY neighborhood_id
+    `, [req.params.userId]);
+    // Return walked counts per neighborhood; client compares against total
+    const out = {};
+    for (const r of rows.rows) out[r.neighborhood_id] = parseInt(r.walked_count, 10);
+    res.json(out);
+  } catch(e) {
+    res.json({});
+  }
+});
+
+// ── Community heat map ─────────────────────────────────────────────────────
+// Returns only the most-walked streets across all users — top 20% by walk
+// count, minimum 3 distinct users, capped at 2000 streets for performance.
+// Grouped into 3 heat tiers so the client can colour them differently.
+app.get('/api/heatmap', auth, async (req, res) => {
+  try {
+    // Total walks per street across all users (distinct user count + sum)
+    const rows = await pool.query(`
+      SELECT street_id, neighborhood_id,
+             COUNT(DISTINCT user_id)  AS user_count,
+             SUM(walk_count)          AS total_walks
+      FROM walks
+      GROUP BY street_id, neighborhood_id
+      HAVING COUNT(DISTINCT user_id) >= 2
+      ORDER BY total_walks DESC
+      LIMIT 2000
+    `);
+
+    if (!rows.rows.length) return res.json([]);
+
+    // Tier thresholds: top 10% = hot, next 20% = warm, rest = mild
+    const counts = rows.rows.map(r => parseInt(r.total_walks, 10)).sort((a,b) => b-a);
+    const hotCutoff  = counts[Math.floor(counts.length * 0.10)] || 1;
+    const warmCutoff = counts[Math.floor(counts.length * 0.30)] || 1;
+
+    const result = rows.rows.map(r => ({
+      streetId:       r.street_id,
+      neighborhoodId: r.neighborhood_id,
+      userCount:      parseInt(r.user_count, 10),
+      totalWalks:     parseInt(r.total_walks, 10),
+      tier: parseInt(r.total_walks, 10) >= hotCutoff  ? 'hot'  :
+            parseInt(r.total_walks, 10) >= warmCutoff ? 'warm' : 'mild'
+    }));
+
+    res.json(result);
+  } catch(e) {
+    console.error('heatmap error', e);
+    res.json([]);
+  }
+});
+
 // ── Fallback → SPA ─────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

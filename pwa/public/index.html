@@ -96,9 +96,21 @@
   <!-- TAB: MAP -->
   <div id="tab-map" class="tab-content active">
     <div id="map"></div>
+
+    <!-- Map controls: heat map toggle + hood panel -->
+    <div id="map-controls" class="map-controls">
+      <button id="heatmap-btn" class="map-ctrl-btn" onclick="toggleHeatmap()" title="Community heat map">🔥</button>
+      <button id="incomplete-exit-btn" class="map-ctrl-btn hidden" onclick="exitIncompleteMode()" title="Exit incomplete view">✕ Exit</button>
+    </div>
+
     <div id="map-hood-panel" class="map-hood-panel hidden">
       <span id="map-hood-name"></span>
       <button id="map-hood-load" class="btn-small" onclick="loadCurrentHoodOnMap()">Load Streets</button>
+    </div>
+
+    <!-- Incomplete streets mode banner -->
+    <div id="incomplete-banner" class="incomplete-banner hidden">
+      <span id="incomplete-banner-text"></span>
     </div>
   </div>
 
@@ -123,8 +135,14 @@
     <div class="detail-header">
       <button class="back-btn" onclick="showNeighborhoods()">← Back</button>
       <h2 id="detail-hood-name"></h2>
+      <div id="hood-badge" class="hood-badge hidden" title="Neighborhood complete!">🏅</div>
     </div>
     <div class="progress-summary" id="detail-summary"></div>
+    <div class="detail-actions">
+      <button class="btn-show-incomplete" id="show-incomplete-btn" onclick="showIncompleteOnMap()">
+        🗺 See incomplete streets
+      </button>
+    </div>
     <div class="filter-tabs">
       <button class="filter-tab active" data-filter="all"      onclick="filterStreets('all',this)">All</button>
       <button class="filter-tab"        data-filter="walked"   onclick="filterStreets('walked',this)">Walked</button>
@@ -139,13 +157,15 @@
       <h2>Friends</h2>
       <button class="btn-invite" onclick="showAddFriend()">+ Invite</button>
     </div>
-    <!-- Sub-tabs: Friends / Activity -->
+    <!-- Sub-tabs: Friends / Activity / Leaderboard -->
     <div class="sub-tabs">
-      <button class="sub-tab active" id="subtab-friends-btn" onclick="showFriendsSubTab('friends',this)">Friends</button>
-      <button class="sub-tab" id="subtab-activity-btn" onclick="showFriendsSubTab('activity',this)">Activity</button>
+      <button class="sub-tab active" id="subtab-friends-btn"      onclick="showFriendsSubTab('friends',this)">Friends</button>
+      <button class="sub-tab"        id="subtab-activity-btn"     onclick="showFriendsSubTab('activity',this)">Activity</button>
+      <button class="sub-tab"        id="subtab-leaderboard-btn"  onclick="showFriendsSubTab('leaderboard',this)">🏆</button>
     </div>
-    <div id="friends-list" class="list-container"></div>
-    <div id="activity-feed" class="list-container hidden"></div>
+    <div id="friends-list"    class="list-container"></div>
+    <div id="activity-feed"   class="list-container hidden"></div>
+    <div id="leaderboard-tab" class="list-container hidden"></div>
 
     <!-- Invite / Add friend sheet -->
     <div id="add-friend-panel" class="bottom-panel hidden">
@@ -199,6 +219,13 @@
       </div>
     </div>
     <div class="stats-grid" id="profile-stats"></div>
+    <div class="badges-section" id="badges-section">
+      <div class="badges-header">
+        <span>Neighborhood Badges</span>
+        <span id="badges-count" class="badges-count"></span>
+      </div>
+      <div id="badges-grid" class="badges-grid"></div>
+    </div>
     <div class="borough-breakdown" id="borough-breakdown"></div>
     <div class="profile-actions">
       <div class="your-id-box">

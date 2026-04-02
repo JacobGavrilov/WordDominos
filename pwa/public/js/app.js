@@ -197,6 +197,7 @@ async function bootApp() {
   renderProfile();
   loadFriends();
   loadStats();
+  loadBadges();
   startAutoTracking();
   checkInviteInURL();
 }
@@ -355,6 +356,7 @@ function matchAndSave(hood) {
   if (newCount > 0) {
     showToast(`+${newCount} new street${newCount > 1 ? 's' : ''} in ${hood.name}! 🎉`);
     updateStreetsBadge();
+    loadBadges(); // refresh badges in case a neighborhood just completed
 
     // Debounce saving to server (save after 5s of no new matches)
     clearTimeout(_saveTimer);
@@ -703,10 +705,226 @@ function switchTab(name, btn) {
   const idx = ['map','neighborhoods','friends','profile'].indexOf(name);
   if (idx >= 0) document.querySelectorAll('.nav-btn')[idx].classList.add('active');
 
-  if (name === 'map' && map) setTimeout(() => map.invalidateSize(), 80);
+  if (name === 'map') setTimeout(() => map && map.invalidateSize(), 80);
   if (name === 'neighborhoods') renderNeighborhoodList();
   if (name === 'friends') loadFriends();
-  if (name === 'profile') renderProfile();
+  if (name === 'profile') { renderProfile(); loadBadges(); }
+}
+
+// ── Leaderboard ───────────────────────────────────────────────────────────
+let _lbMode = 'week'; // 'week' | 'alltime'
+
+async function renderLeaderboard() {
+  const container = document.getElementById('leaderboard-tab');
+  container.innerHTML = `
+    <div class="leaderboard-toggle">
+      <button class="lb-toggle-btn ${_lbMode==='week'?'active':''}" onclick="setLbMode('week',this)">This Week</button>
+      <button class="lb-toggle-btn ${_lbMode==='alltime'?'active':''}" onclick="setLbMode('alltime',this)">All Time</button>
+    </div>
+    <div id="lb-rows" class="list-container" style="padding-top:4px">
+      <div class="empty-state"><div class="emoji">⏳</div><h3>Loading…</h3></div>
+    </div>`;
+
+  try {
+    const data = await fetch('/api/leaderboard', { headers: authHeaders() }).then(r => r.json());
+    renderLbRows(data);
+  } catch { document.getElementById('lb-rows').innerHTML = '<div class="empty-state"><div class="emoji">😕</div><h3>Could not load</h3></div>'; }
+}
+
+function setLbMode(mode, btn) {
+  _lbMode = mode;
+  document.querySelectorAll('.lb-toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Re-render with current data (refetch)
+  renderLeaderboard();
+}
+
+function renderLbRows(data) {
+  const rows = _lbMode === 'week' ? data.thisWeek : data.allTime;
+  const me   = data.currentUserId;
+  const container = document.getElementById('lb-rows');
+
+  if (!rows.length) {
+    container.innerHTML = '<div class="empty-state"><div class="emoji">🏃</div><h3>No data yet</h3><p>Start walking to appear here</p></div>';
+    return;
+  }
+
+  const rankEmoji = ['🥇','🥈','🥉'];
+  const rankClass = ['gold','silver','bronze'];
+  container.innerHTML = rows.map((r, i) => {
+    const isMe = r.id === me;
+    const rank = i < 3 ? `<span class="lb-rank ${rankClass[i]}">${rankEmoji[i]}</span>`
+                       : `<span class="lb-rank">${i+1}</span>`;
+    return `
+    <div class="lb-row${isMe ? ' me' : ''}">
+      ${rank}
+      <div class="lb-info">
+        <div class="lb-name">${escHtml(r.name)}${isMe ? ' (you)' : ''}</div>
+        <div class="lb-sub">${_lbMode === 'week' ? 'this week' : 'all time'}</div>
+      </div>
+      <div class="lb-count">${r.total}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Badges ────────────────────────────────────────────────────────────────
+let _earnedBadges = {}; // { neighborhoodId: walkedCount }
+
+async function loadBadges() {
+  try {
+    _earnedBadges = await fetch(`/api/badges/${getCurrentUserId()}`, { headers: authHeaders() }).then(r => r.json());
+    renderBadges();
+  } catch { renderBadges(); }
+}
+
+function renderBadges() {
+  const grid = document.getElementById('badges-grid');
+  if (!grid) return;
+
+  const badges = NYC_NEIGHBORHOODS.map(h => {
+    const cached   = streetCache[h.id] || loadStreetCache(h.id);
+    const total    = cached ? cached.length : 0;
+    const walked   = _earnedBadges[h.id] || 0;
+    const earned   = total > 0 && walked >= total;
+    const pct      = total > 0 ? Math.round(walked / total * 100) : 0;
+    return { hood: h, earned, pct, walked, total };
+  });
+
+  const earnedCount = badges.filter(b => b.earned).length;
+  const countEl = document.getElementById('badges-count');
+  if (countEl) countEl.textContent = `${earnedCount} / ${badges.length}`;
+
+  // Show earned first, then by completion %
+  badges.sort((a, b) => (b.earned - a.earned) || (b.pct - a.pct));
+
+  grid.innerHTML = badges.map(({ hood, earned, pct }) => `
+    <div class="badge-item ${earned ? 'earned' : 'locked'}" title="${hood.name}${earned ? ' — Complete!' : ` — ${pct}%`}">
+      <div class="badge-emoji">${earned ? '🏅' : '⬜'}</div>
+      <div class="badge-name">${hood.name.length > 12 ? hood.name.slice(0,11)+'…' : hood.name}</div>
+    </div>`).join('');
+
+  // Badge for neighborhood detail header
+  const detailName = document.getElementById('detail-hood-name');
+  if (detailName) {
+    const hood  = NYC_NEIGHBORHOODS.find(h => h.name === detailName.textContent);
+    const badge = document.getElementById('hood-badge');
+    if (hood && badge) {
+      const cached = streetCache[hood.id] || loadStreetCache(hood.id);
+      const total  = cached ? cached.length : 0;
+      const walked = _earnedBadges[hood.id] || 0;
+      badge.classList.toggle('hidden', !(total > 0 && walked >= total));
+    }
+  }
+}
+
+// ── Incomplete streets map mode ───────────────────────────────────────────
+let _incompleteModeHood    = null;
+let _incompleteLayers      = {};
+
+function showIncompleteOnMap() {
+  const hoodName = document.getElementById('detail-hood-name').textContent;
+  const hood     = NYC_NEIGHBORHOODS.find(h => h.name === hoodName);
+  if (!hood) return;
+
+  const streets = streetCache[hood.id] || loadStreetCache(hood.id);
+  if (!streets) { showToast('Load streets first'); return; }
+
+  const walked   = walkedStreets[hood.id] || new Set();
+  const unwalked = streets.filter(s => !walked.has(s.id));
+  if (!unwalked.length) { showToast('You\'ve walked every street here! 🏅'); return; }
+
+  // Switch to map tab
+  switchTab('map', document.querySelectorAll('.nav-btn')[0]);
+
+  // Zoom to neighborhood bounds
+  const [minLat, minLon, maxLat, maxLon] = hood.bounds;
+  map.fitBounds([[minLat, minLon], [maxLat, maxLon]], { padding: [20, 20] });
+
+  // Clear old incomplete layers
+  exitIncompleteMode(true);
+
+  _incompleteModeHood = hood;
+
+  // Draw unwalked streets in orange
+  for (const s of unwalked) {
+    const layer = L.polyline(s.coords, { color: '#f97316', weight: 4, opacity: 0.85 })
+      .bindPopup(`<b>${s.name}</b><br>🟠 Not walked yet`)
+      .addTo(map);
+    _incompleteLayers[s.id] = layer;
+  }
+
+  // Show banner + exit button
+  document.getElementById('incomplete-banner').classList.remove('hidden');
+  document.getElementById('incomplete-banner-text').textContent =
+    `${unwalked.length} unwalked streets in ${hood.name}`;
+  document.getElementById('incomplete-exit-btn').classList.remove('hidden');
+}
+
+function exitIncompleteMode(silent = false) {
+  Object.values(_incompleteLayers).forEach(l => map.removeLayer(l));
+  _incompleteLayers = {};
+  _incompleteModeHood = null;
+  document.getElementById('incomplete-banner').classList.add('hidden');
+  document.getElementById('incomplete-exit-btn').classList.add('hidden');
+  if (!silent) {
+    // Restore normal street layers if a hood is loaded
+    if (currentHood && hoodStreets.length) renderStreetLayers(currentHood);
+  }
+}
+
+// ── Community heat map ────────────────────────────────────────────────────
+let _heatmapActive  = false;
+let _heatmapLayers  = {};
+let _heatmapLoaded  = false;
+
+const HEAT_COLORS = { hot: '#ef4444', warm: '#f97316', mild: '#eab308' };
+
+async function toggleHeatmap() {
+  const btn = document.getElementById('heatmap-btn');
+  if (_heatmapActive) {
+    // Turn off
+    Object.values(_heatmapLayers).forEach(l => map.removeLayer(l));
+    _heatmapLayers = {};
+    _heatmapActive = false;
+    btn.classList.remove('active');
+    showToast('Heat map off');
+    return;
+  }
+
+  _heatmapActive = true;
+  btn.classList.add('active');
+  showToast('Loading heat map…');
+
+  try {
+    const data = await fetch('/api/heatmap', { headers: authHeaders() }).then(r => r.json());
+    if (!data.length) { showToast('No community data yet'); _heatmapActive = false; btn.classList.remove('active'); return; }
+
+    // We only have street IDs — need to cross-reference with cached street geometry
+    const streetGeoMap = {};
+    for (const hood of NYC_NEIGHBORHOODS) {
+      const cached = streetCache[hood.id] || loadStreetCache(hood.id);
+      if (cached) for (const s of cached) streetGeoMap[s.id] = s.coords;
+    }
+
+    let drawn = 0;
+    for (const item of data) {
+      const coords = streetGeoMap[item.streetId];
+      if (!coords) continue;
+      const color  = HEAT_COLORS[item.tier] || HEAT_COLORS.mild;
+      const weight = item.tier === 'hot' ? 7 : item.tier === 'warm' ? 5 : 3;
+      const layer  = L.polyline(coords, { color, weight, opacity: 0.75 })
+        .bindPopup(`<b>Popular street</b><br>🔥 Walked by ${item.userCount} people, ${item.totalWalks} times`)
+        .addTo(map);
+      _heatmapLayers[item.streetId] = layer;
+      drawn++;
+    }
+
+    showToast(`Heat map: ${drawn} popular streets`);
+  } catch(e) {
+    showToast('Could not load heat map');
+    _heatmapActive = false;
+    btn.classList.remove('active');
+  }
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────
