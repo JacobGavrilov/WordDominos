@@ -220,7 +220,6 @@ async function bootApp() {
   if (rawData.meta) Object.assign(streetMeta, rawData.meta);
 
   initMap();
-  renderNeighborhoodList();
   renderProfile();
   loadFriends();
   loadStats();
@@ -551,8 +550,8 @@ async function openNeighborhoodDetail(hoodId) {
   const hood = NYC_NEIGHBORHOODS.find(h => h.id === hoodId);
   if (!hood) return;
 
-  document.getElementById('tab-neighborhoods').style.display = 'none';
-  document.getElementById('tab-neighborhoods').classList.remove('active');
+  document.getElementById('tab-goals').style.display = 'none';
+  document.getElementById('tab-goals').classList.remove('active');
   const detail = document.getElementById('tab-hood-detail');
   detail.classList.add('active');
   detail.style.display = 'flex';
@@ -575,12 +574,16 @@ async function openNeighborhoodDetail(hoodId) {
   renderNeighborhoodDetail(hood, streets);
 }
 
-function showNeighborhoods() {
+function showGoals() {
   document.getElementById('tab-hood-detail').classList.remove('active');
   document.getElementById('tab-hood-detail').style.display = 'none';
-  const n = document.getElementById('tab-neighborhoods');
+  const n = document.getElementById('tab-goals');
   n.classList.add('active');
   n.style.display = 'flex';
+  // Update nav
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const idx = ['feed','map','goals','leaderboard','profile'].indexOf('goals');
+  document.querySelectorAll('.nav-btn')[idx].classList.add('active');
   renderNeighborhoodList();
 }
 
@@ -669,7 +672,7 @@ let _serverStats = { streak: 0, distKm: 0, totalStreets: 0 };
 async function loadStats() {
   try {
     const r = await fetch('/api/stats', { headers: authHeaders() });
-    if (r.ok) { _serverStats = await r.json(); renderProfile(); }
+    if (r.ok) { _serverStats = await r.json(); renderProfile(); renderFeedWeeklyCard(); }
   } catch(_) {}
 }
 
@@ -738,20 +741,86 @@ function switchTab(name, btn) {
   });
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 
-  // Also hide friend detail if switching away
   const fd = document.getElementById('tab-friend-detail');
   if (fd) { fd.classList.remove('active'); fd.style.display = 'none'; }
 
   const target = document.getElementById('tab-' + name);
-  target.classList.add('active'); target.style.display = 'flex';
+  if (target) { target.classList.add('active'); target.style.display = 'flex'; }
 
-  const idx = ['map','neighborhoods','friends','profile'].indexOf(name);
-  if (idx >= 0) document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+  if (btn) {
+    btn.classList.add('active');
+  } else {
+    const idx = ['feed','map','goals','leaderboard','profile'].indexOf(name);
+    if (idx >= 0) document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+  }
 
-  if (name === 'map') setTimeout(() => map && map.invalidateSize(), 80);
-  if (name === 'neighborhoods') renderNeighborhoodList();
-  if (name === 'friends') loadFriends();
-  if (name === 'profile') { renderProfile(); loadBadges(); }
+  if (name === 'map')         setTimeout(() => map && map.invalidateSize(), 80);
+  if (name === 'goals')       { renderNeighborhoodList(); renderBadges(); renderMetaBadges(); }
+  if (name === 'leaderboard') renderLeaderboard();
+  if (name === 'feed')        renderFeed();
+  if (name === 'profile')     { renderProfile(); loadFriends(); }
+}
+
+// ── Feed tab ──────────────────────────────────────────────────────────────
+async function renderFeed() {
+  if (!currentUser) return;
+
+  // Time-of-day greeting
+  const hour     = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greetEl  = document.getElementById('feed-greeting');
+  const subEl    = document.getElementById('feed-sub');
+  if (greetEl) greetEl.textContent = `${greeting}, ${currentUser.firstName} 👋`;
+  if (subEl)   subEl.textContent   = `${_serverStats.totalStreets || 0} streets walked across NYC`;
+
+  // Weekly recap card
+  renderFeedWeeklyCard();
+
+  // Invite CTA — show only when user has no friends
+  const cta = document.getElementById('feed-invite-cta');
+  if (cta) cta.classList.toggle('hidden', friendsData.length > 0);
+
+  // Activity feed
+  renderActivityFeed();
+}
+
+function renderFeedWeeklyCard() {
+  const el = document.getElementById('feed-weekly-card');
+  if (!el) return;
+  const m = _metaBadges || {};
+  const weekly  = m.weeklyStreets  || 0;
+  const days    = m.daysThisWeek   || 0;
+  const streak  = m.streak         || 0;
+  const total   = _serverStats.totalStreets || 0;
+
+  // Progress toward nearest milestone
+  const milestones = [50, 200, 500, 1000, 2500, 5000];
+  const next = milestones.find(n => n > total) || milestones[milestones.length - 1];
+  const pct  = Math.min(100, Math.round(total / next * 100));
+
+  el.innerHTML = `
+    <div class="feed-recap-card">
+      <div class="feed-recap-row">
+        <div class="feed-recap-stat">
+          <div class="feed-recap-num">${weekly}</div>
+          <div class="feed-recap-lbl">This week</div>
+        </div>
+        <div class="feed-recap-stat">
+          <div class="feed-recap-num">${days}</div>
+          <div class="feed-recap-lbl">Days out</div>
+        </div>
+        <div class="feed-recap-stat">
+          <div class="feed-recap-num">${streak}🔥</div>
+          <div class="feed-recap-lbl">Streak</div>
+        </div>
+      </div>
+      <div class="feed-progress-wrap">
+        <div class="feed-progress-label">
+          <span>${total} streets</span><span>${next} goal</span>
+        </div>
+        <div class="feed-progress-bar"><div class="feed-progress-fill" style="width:${pct}%"></div></div>
+      </div>
+    </div>`;
 }
 
 // ── Leaderboard ───────────────────────────────────────────────────────────
@@ -822,6 +891,7 @@ async function loadBadges() {
     renderBadges();
     renderMetaBadges();
     renderWeeklyStats();
+    renderFeedWeeklyCard();
   } catch { renderBadges(); }
 }
 

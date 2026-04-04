@@ -52,7 +52,6 @@
   <!-- RESET PASSWORD -->
   <div id="reset-panel" class="auth-form hidden">
     <p style="color:var(--text2);font-size:14px;text-align:center">Choose a new password for your account.</p>
-    <!-- Token is auto-filled from the email link — hidden from users -->
     <input id="reset-token" type="hidden">
     <div class="pw-row">
       <input id="reset-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password">
@@ -94,31 +93,51 @@
     <span id="status-streets" class="status-streets hidden"></span>
   </div>
 
-  <!-- TAB: MAP -->
-  <div id="tab-map" class="tab-content active">
-    <div id="map"></div>
+  <!-- ── TAB: FEED ── -->
+  <div id="tab-feed" class="tab-content active">
+    <div class="feed-header">
+      <div>
+        <div class="feed-greeting" id="feed-greeting">Good morning 👋</div>
+        <div class="feed-sub" id="feed-sub">NYC Street Walker</div>
+      </div>
+      <button class="btn-invite-sm" onclick="showAddFriend()">+ Invite</button>
+    </div>
+    <!-- Weekly recap card -->
+    <div id="feed-weekly-card" class="feed-card-wrap"></div>
+    <!-- Invite CTA (shown when 0 friends) -->
+    <div id="feed-invite-cta" class="feed-invite-cta hidden">
+      <div class="feed-invite-icon">👥</div>
+      <div class="feed-invite-text">
+        <strong>Walk with friends</strong>
+        <span>Invite someone to see each other's streets on the map</span>
+      </div>
+      <button class="btn-primary feed-invite-btn" onclick="showAddFriend()">+ Invite</button>
+    </div>
+    <!-- Activity -->
+    <div class="feed-section-label">Recent Activity</div>
+    <div id="activity-feed" class="list-container"></div>
+  </div>
 
-    <!-- Map controls: heat map toggle + hood panel -->
+  <!-- ── TAB: MAP ── -->
+  <div id="tab-map" class="tab-content hidden">
+    <div id="map"></div>
     <div id="map-controls" class="map-controls">
       <button id="heatmap-btn" class="map-ctrl-btn" onclick="toggleHeatmap()" title="Community heat map">🔥</button>
-      <button id="incomplete-exit-btn" class="map-ctrl-btn hidden" onclick="exitIncompleteMode()" title="Exit incomplete view">✕ Exit</button>
+      <button id="incomplete-exit-btn" class="map-ctrl-btn hidden" onclick="exitIncompleteMode()">✕ Exit</button>
     </div>
-
     <div id="map-hood-panel" class="map-hood-panel hidden">
       <span id="map-hood-name"></span>
       <button id="map-hood-load" class="btn-small" onclick="loadCurrentHoodOnMap()">Load Streets</button>
     </div>
-
-    <!-- Incomplete streets mode banner -->
     <div id="incomplete-banner" class="incomplete-banner hidden">
       <span id="incomplete-banner-text"></span>
     </div>
   </div>
 
-  <!-- TAB: NEIGHBORHOODS -->
-  <div id="tab-neighborhoods" class="tab-content hidden">
+  <!-- ── TAB: GOALS ── -->
+  <div id="tab-goals" class="tab-content hidden">
     <div class="tab-header">
-      <h2>Neighborhoods</h2>
+      <h2>Goals</h2>
       <select id="borough-filter" onchange="renderNeighborhoodList()">
         <option value="">All Boroughs</option>
         <option value="Manhattan">Manhattan</option>
@@ -132,12 +151,27 @@
       <input id="hood-search" type="search" placeholder="🔍  Search neighborhoods…" oninput="renderNeighborhoodList()" autocomplete="off">
     </div>
     <div id="neighborhood-list" class="list-container"></div>
+    <!-- Achievements section -->
+    <div class="badges-section" id="meta-badges-section">
+      <div class="badges-header">
+        <span>Achievements</span>
+        <span id="meta-badges-count" class="badges-count"></span>
+      </div>
+      <div id="meta-badges-grid" class="badges-grid meta-badges-grid"></div>
+    </div>
+    <div class="badges-section" id="badges-section">
+      <div class="badges-header">
+        <span>Neighborhood Badges</span>
+        <span id="badges-count" class="badges-count"></span>
+      </div>
+      <div id="badges-grid" class="badges-grid"></div>
+    </div>
   </div>
 
-  <!-- TAB: NEIGHBORHOOD DETAIL -->
+  <!-- ── TAB: NEIGHBORHOOD DETAIL ── -->
   <div id="tab-hood-detail" class="tab-content hidden">
     <div class="detail-header">
-      <button class="back-btn" onclick="showNeighborhoods()">← Back</button>
+      <button class="back-btn" onclick="showGoals()">← Goals</button>
       <h2 id="detail-hood-name"></h2>
       <div id="hood-badge" class="hood-badge hidden" title="Neighborhood complete!">🏅</div>
     </div>
@@ -155,65 +189,13 @@
     <div id="street-list" class="list-container"></div>
   </div>
 
-  <!-- TAB: FRIENDS -->
-  <div id="tab-friends" class="tab-content hidden">
-    <div class="tab-header">
-      <h2>Friends</h2>
-      <button class="btn-invite" onclick="showAddFriend()">+ Invite</button>
-    </div>
-    <!-- Sub-tabs: Friends / Activity / Leaderboard -->
-    <div class="sub-tabs">
-      <button class="sub-tab active" id="subtab-friends-btn"      onclick="showFriendsSubTab('friends',this)">Friends</button>
-      <button class="sub-tab"        id="subtab-activity-btn"     onclick="showFriendsSubTab('activity',this)">Activity</button>
-      <button class="sub-tab"        id="subtab-leaderboard-btn"  onclick="showFriendsSubTab('leaderboard',this)">🏆</button>
-    </div>
-    <div id="friends-list"    class="list-container"></div>
-    <div id="activity-feed"   class="list-container hidden"></div>
-    <div id="leaderboard-tab" class="list-container hidden"></div>
-
-    <!-- Invite / Add friend sheet -->
-    <div id="add-friend-panel" class="bottom-panel hidden">
-      <div class="panel-handle"></div>
-      <h3>Add a Friend</h3>
-
-      <!-- Primary: shareable invite link -->
-      <div class="invite-link-box">
-        <p class="hint">Share this link — when they open it, you're automatically connected.</p>
-        <div class="invite-link-row">
-          <span id="invite-link-text" class="invite-link-preview">Generating…</span>
-          <button id="invite-share-btn" class="btn-share" onclick="shareInviteLink()">Share 🔗</button>
-        </div>
-      </div>
-
-      <div class="divider-or"><span>or add by ID</span></div>
-
-      <input id="friend-id-input" type="text" placeholder="Paste friend's User ID" style="font-family:monospace;font-size:13px">
-      <button onclick="addFriendByID()" class="btn-primary">Add Friend</button>
-      <button onclick="hideAddFriend()" class="btn-ghost">Cancel</button>
-    </div>
-
-    <!-- Invite landing banner (shown when opened via invite link) -->
-    <div id="invite-banner" class="invite-banner hidden">
-      <span id="invite-banner-text"></span>
-      <button id="invite-banner-btn" class="btn-small" onclick="acceptPendingInvite()">Accept</button>
-    </div>
+  <!-- ── TAB: LEADERBOARD ── -->
+  <div id="tab-leaderboard" class="tab-content hidden">
+    <div class="tab-header"><h2>Leaderboard</h2></div>
+    <div id="leaderboard-tab" class="list-container" style="padding-top:0"></div>
   </div>
 
-  <!-- TAB: FRIEND DETAIL -->
-  <div id="tab-friend-detail" class="tab-content hidden">
-    <div class="detail-header">
-      <button class="back-btn" onclick="closeFriendDetail()">← Back</button>
-      <div id="fd-avatar" class="avatar" style="width:36px;height:36px;font-size:14px"></div>
-      <h2 id="fd-name"></h2>
-    </div>
-    <div class="progress-summary" id="fd-stats"></div>
-    <div class="fd-section-label">Comparison</div>
-    <div class="fd-comparison" id="fd-comparison"></div>
-    <div class="fd-section-label">Their Recent Streets</div>
-    <div id="fd-streets" class="list-container" style="padding-top:0"></div>
-  </div>
-
-  <!-- TAB: PROFILE -->
+  <!-- ── TAB: PROFILE ── -->
   <div id="tab-profile" class="tab-content hidden">
     <div class="profile-header">
       <div id="profile-avatar" class="avatar-large"></div>
@@ -223,22 +205,13 @@
       </div>
     </div>
     <div class="stats-grid" id="profile-stats"></div>
-    <div id="weekly-stats" class="weekly-stats"></div>
-    <div class="badges-section" id="meta-badges-section">
-      <div class="badges-header">
-        <span>Achievements</span>
-        <span id="meta-badges-count" class="badges-count"></span>
-      </div>
-      <div id="meta-badges-grid" class="badges-grid meta-badges-grid"></div>
-    </div>
-    <div class="badges-section" id="badges-section">
-      <div class="badges-header">
-        <span>Neighborhood Badges</span>
-        <span id="badges-count" class="badges-count"></span>
-      </div>
-      <div id="badges-grid" class="badges-grid"></div>
-    </div>
     <div class="borough-breakdown" id="borough-breakdown"></div>
+    <!-- Friends section -->
+    <div class="profile-section-label">
+      <span>Friends</span>
+      <button class="btn-small" onclick="showAddFriend()">+ Invite</button>
+    </div>
+    <div id="friends-list" class="list-container" style="flex:0;min-height:60px"></div>
     <div class="profile-actions">
       <div class="your-id-box">
         <label>Your User ID (share with friends)</label>
@@ -251,13 +224,53 @@
     </div>
   </div>
 
+  <!-- ── TAB: FRIEND DETAIL ── -->
+  <div id="tab-friend-detail" class="tab-content hidden">
+    <div class="detail-header">
+      <button class="back-btn" onclick="closeFriendDetail()">← Profile</button>
+      <div id="fd-avatar" class="avatar" style="width:36px;height:36px;font-size:14px"></div>
+      <h2 id="fd-name"></h2>
+    </div>
+    <div class="progress-summary" id="fd-stats"></div>
+    <div class="fd-section-label">Comparison</div>
+    <div class="fd-comparison" id="fd-comparison"></div>
+    <div class="fd-section-label">Their Recent Streets</div>
+    <div id="fd-streets" class="list-container" style="padding-top:0"></div>
+  </div>
+
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav">
-    <button class="nav-btn active" onclick="switchTab('map',this)"><span>🗺️</span><span>Map</span></button>
-    <button class="nav-btn" onclick="switchTab('neighborhoods',this)"><span>🏙️</span><span>Neighborhoods</span></button>
-    <button class="nav-btn" onclick="switchTab('friends',this)"><span>👥</span><span>Friends</span></button>
-    <button class="nav-btn" onclick="switchTab('profile',this)"><span>👤</span><span>Profile</span></button>
+    <button class="nav-btn active" onclick="switchTab('feed',this)"><span>📰</span><span>Feed</span></button>
+    <button class="nav-btn"        onclick="switchTab('map',this)"><span>🗺️</span><span>Map</span></button>
+    <button class="nav-btn"        onclick="switchTab('goals',this)"><span>🎯</span><span>Goals</span></button>
+    <button class="nav-btn"        onclick="switchTab('leaderboard',this)"><span>🏆</span><span>Rank</span></button>
+    <button class="nav-btn"        onclick="switchTab('profile',this)"><span>👤</span><span>Profile</span></button>
   </nav>
+</div>
+
+<!-- ── Global overlays (outside tabs so always accessible) ── -->
+
+<!-- Add friend bottom sheet -->
+<div id="add-friend-panel" class="bottom-panel hidden">
+  <div class="panel-handle"></div>
+  <h3>Add a Friend</h3>
+  <div class="invite-link-box">
+    <p class="hint">Share this link — when they open it, you're automatically connected.</p>
+    <div class="invite-link-row">
+      <span id="invite-link-text" class="invite-link-preview">Generating…</span>
+      <button id="invite-share-btn" class="btn-share" onclick="shareInviteLink()">Share 🔗</button>
+    </div>
+  </div>
+  <div class="divider-or"><span>or add by ID</span></div>
+  <input id="friend-id-input" type="text" placeholder="Paste friend's User ID" style="font-family:monospace;font-size:13px">
+  <button onclick="addFriendByID()" class="btn-primary">Add Friend</button>
+  <button onclick="hideAddFriend()" class="btn-ghost">Cancel</button>
+</div>
+
+<!-- Invite landing banner -->
+<div id="invite-banner" class="invite-banner hidden">
+  <span id="invite-banner-text"></span>
+  <button id="invite-banner-btn" class="btn-small" onclick="acceptPendingInvite()">Accept</button>
 </div>
 
 <div id="toast" class="toast hidden"></div>
@@ -265,9 +278,7 @@
 <!-- ══════════════════════ ONBOARDING OVERLAY ══════════════════════ -->
 <div id="onboarding-overlay" class="onboarding-overlay hidden">
   <div class="onboarding-card">
-    <div id="onboarding-steps">
-      <!-- steps injected by JS -->
-    </div>
+    <div id="onboarding-steps"></div>
     <div class="onboarding-dots" id="onboarding-dots"></div>
     <div class="onboarding-nav">
       <button id="ob-skip" class="btn-ghost" onclick="closeOnboarding()">Skip</button>

@@ -296,9 +296,9 @@ function openFriendDetail(friendId, colorIndex) {
   const friend = friendsData.find(f => f.id === friendId);
   if (!friend) return;
 
-  // Hide friends tab, show detail
-  document.getElementById('tab-friends').style.display = 'none';
-  document.getElementById('tab-friends').classList.remove('active');
+  // Hide profile tab, show detail
+  document.getElementById('tab-profile').style.display = 'none';
+  document.getElementById('tab-profile').classList.remove('active');
   const detail = document.getElementById('tab-friend-detail');
   detail.classList.add('active');
   detail.style.display = 'flex';
@@ -358,9 +358,13 @@ function openFriendDetail(friendId, colorIndex) {
 function closeFriendDetail() {
   document.getElementById('tab-friend-detail').classList.remove('active');
   document.getElementById('tab-friend-detail').style.display = 'none';
-  const t = document.getElementById('tab-friends');
+  const t = document.getElementById('tab-profile');
   t.classList.add('active');
   t.style.display = 'flex';
+  // Restore nav active state
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const idx = ['feed','map','goals','leaderboard','profile'].indexOf('profile');
+  document.querySelectorAll('.nav-btn')[idx].classList.add('active');
 }
 
 // ── Copy ID fallback ──────────────────────────────────────────────────────

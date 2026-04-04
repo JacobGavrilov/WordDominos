@@ -353,3 +353,36 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); }
 .onboarding-nav { display: flex; gap: 10px; }
 .onboarding-nav .btn-ghost { flex: 0 0 auto; }
 .onboarding-nav .btn-primary { flex: 1; }
+
+/* ── Feed tab ── */
+.feed-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 10px; }
+.feed-greeting { font-size: 18px; font-weight: 700; color: var(--text); }
+.feed-sub { font-size: 13px; color: var(--green); margin-top: 2px; font-weight: 600; }
+.btn-invite-sm { background: var(--green); color: #000; border: none; border-radius: 20px; padding: 7px 14px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+
+.feed-card-wrap { padding: 0 14px 10px; }
+.feed-recap-card { background: var(--surface); border-radius: 16px; padding: 16px; border: 1px solid var(--surface2); }
+.feed-recap-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.feed-recap-stat { text-align: center; }
+.feed-recap-num { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
+.feed-recap-lbl { font-size: 11px; color: var(--text2); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+.feed-progress-wrap { }
+.feed-progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); margin-bottom: 5px; }
+.feed-progress-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.feed-progress-fill { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.6s ease; }
+
+.feed-invite-cta { margin: 0 14px 10px; background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.25); border-radius: 16px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+.feed-invite-icon { font-size: 28px; flex-shrink: 0; }
+.feed-invite-text { flex: 1; }
+.feed-invite-text strong { display: block; font-size: 14px; color: var(--text); margin-bottom: 2px; }
+.feed-invite-text span { font-size: 12px; color: var(--text2); }
+.feed-invite-btn { white-space: nowrap; padding: 8px 14px; font-size: 13px; }
+
+.feed-section-label { padding: 6px 16px 4px; font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* ── Profile section label ── */
+.profile-section-label { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 6px; font-size: 13px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* ── Goals tab: 5-tab nav adjustments ── */
+.nav-btn { font-size: 9px; }
+.nav-btn span:first-child { font-size: 20px; }
