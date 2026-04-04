@@ -40,6 +40,17 @@ window.addEventListener('DOMContentLoaded', () => {
     sel.appendChild(og);
   }
 
+  // Handle ?reset=TOKEN from password-reset email link
+  const urlParams  = new URLSearchParams(window.location.search);
+  const resetParam = urlParams.get('reset');
+  if (resetParam) {
+    document.getElementById('reset-token').value = resetParam;
+    history.replaceState({}, '', window.location.pathname); // strip token from URL bar
+    showScreen('auth');
+    showResetPanel();
+    return; // skip session restore — user needs to set password first
+  }
+
   // Try restoring session from localStorage
   const token = localStorage.getItem('token');
   if (token) {
@@ -126,6 +137,13 @@ function showForgotPassword(e) {
   document.getElementById('tab-signup-btn').classList.remove('active');
 }
 
+function showResetPanel() {
+  ['login-panel','signup-panel','forgot-panel'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('reset-panel').classList.remove('hidden');
+  document.getElementById('tab-login-btn').classList.remove('active');
+  document.getElementById('tab-signup-btn').classList.remove('active');
+}
+
 async function doForgot() {
   const email  = document.getElementById('forgot-email').value.trim();
   const msgEl  = document.getElementById('forgot-msg');
@@ -134,15 +152,19 @@ async function doForgot() {
   try {
     const r    = await fetch('/api/auth/forgot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
     const data = await r.json();
-    msgEl.textContent = data.message || 'Check your email.';
-    msgEl.classList.remove('hidden');
-    if (data.resetToken) {
-      // Dev mode: show the token and transition to reset panel
-      setTimeout(() => {
-        document.getElementById('forgot-panel').classList.add('hidden');
-        document.getElementById('reset-panel').classList.remove('hidden');
-        document.getElementById('reset-token').value = data.resetToken;
-      }, 1500);
+
+    if (data.resetLink) {
+      // Dev mode (no email service): show the link directly so dev can test
+      msgEl.textContent = '🔧 Dev mode — copy this link to reset:';
+      msgEl.classList.remove('hidden');
+      const linkEl = document.createElement('a');
+      linkEl.href  = data.resetLink;
+      linkEl.style.cssText = 'display:block;word-break:break-all;font-size:11px;color:var(--green);margin-top:6px';
+      linkEl.textContent   = data.resetLink;
+      msgEl.appendChild(linkEl);
+    } else {
+      msgEl.textContent = data.message || 'If that email exists, a reset link was sent.';
+      msgEl.classList.remove('hidden');
     }
   } catch(e) { msgEl.textContent = 'Error. Try again.'; msgEl.classList.remove('hidden'); }
 }

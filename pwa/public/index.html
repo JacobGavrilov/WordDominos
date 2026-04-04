@@ -51,10 +51,11 @@
 
   <!-- RESET PASSWORD -->
   <div id="reset-panel" class="auth-form hidden">
-    <p style="color:var(--text2);font-size:14px;text-align:center">Enter your reset token and new password.</p>
-    <input id="reset-token" type="text" placeholder="Reset token" style="font-family:monospace;font-size:13px">
+    <p style="color:var(--text2);font-size:14px;text-align:center">Choose a new password for your account.</p>
+    <!-- Token is auto-filled from the email link — hidden from users -->
+    <input id="reset-token" type="hidden">
     <div class="pw-row">
-      <input id="reset-password" type="password" placeholder="New password">
+      <input id="reset-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password">
       <button class="pw-toggle" onclick="togglePw('reset-password')">👁</button>
     </div>
     <button class="btn-primary" onclick="doReset()">Set New Password</button>

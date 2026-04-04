@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt   = require('bcrypt');
 const jwt      = require('jsonwebtoken');
 const { Pool } = require('pg');
+const { Resend } = require('resend');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -84,6 +85,46 @@ function auth(req, res, next) {
   }
 }
 
+// ── Email template ────────────────────────────────────────────────────────
+function buildResetEmail(resetLink) {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:40px 16px">
+    <tr><td align="center">
+      <table width="100%" style="max-width:480px;background:#1e293b;border-radius:16px;overflow:hidden;border:1px solid #334155">
+        <!-- Header -->
+        <tr><td style="background:#0f172a;padding:28px 32px;text-align:center;border-bottom:1px solid #334155">
+          <div style="font-size:32px;margin-bottom:6px">🗺️</div>
+          <div style="color:#22c55e;font-size:20px;font-weight:700;letter-spacing:-0.3px">NYC Street Walker</div>
+        </td></tr>
+        <!-- Body -->
+        <tr><td style="padding:32px">
+          <h1 style="margin:0 0 12px;color:#f1f5f9;font-size:22px;font-weight:700">Reset your password</h1>
+          <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6">
+            We received a request to reset your password. Click the button below — this link expires in <strong style="color:#f1f5f9">1 hour</strong>.
+          </p>
+          <a href="${resetLink}" style="display:block;background:#22c55e;color:#000;text-decoration:none;font-weight:700;font-size:15px;padding:14px 24px;border-radius:12px;text-align:center">
+            Reset Password
+          </a>
+          <p style="margin:24px 0 0;color:#64748b;font-size:13px;line-height:1.5">
+            If you didn't request this, you can safely ignore this email — your password won't change.<br><br>
+            Or copy this link into your browser:<br>
+            <span style="color:#94a3b8;word-break:break-all;font-size:12px">${resetLink}</span>
+          </p>
+        </td></tr>
+        <!-- Footer -->
+        <tr><td style="padding:16px 32px;border-top:1px solid #334155;text-align:center">
+          <span style="color:#475569;font-size:12px">NYC Street Walker · Track every block</span>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 // ── Auth ───────────────────────────────────────────────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
   const { email, password, firstName, lastName, dateOfBirth, homeNeighborhood } = req.body;
@@ -139,22 +180,37 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Simple password reset — no email service yet, returns token in response.
-// In production wire SENDGRID_API_KEY / similar to email the token instead.
 app.post('/api/auth/forgot', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email required' });
   const result = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
   if (!result.rows.length) {
     // Don't reveal whether account exists
-    return res.json({ message: 'If that email exists, a reset token was sent.' });
+    return res.json({ message: 'If that email exists, a reset link was sent.' });
   }
   const resetToken = jwt.sign({ id: result.rows[0].id, purpose: 'reset' }, JWT_SECRET, { expiresIn: '1h' });
-  // TODO: send resetToken via email. For now return it directly (dev only).
-  const isDev = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes('localhost');
-  res.json({
-    message: 'Reset token generated.',
-    ...(isDev ? { resetToken } : {})
-  });
+  const appUrl     = process.env.APP_URL || (req.headers.origin || `http://localhost:${PORT}`);
+  const resetLink  = `${appUrl}?reset=${resetToken}`;
+
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: process.env.FROM_EMAIL || 'NYC Street Walker <onboarding@resend.dev>',
+        to:   email.toLowerCase(),
+        subject: 'Reset your NYC Street Walker password',
+        html: buildResetEmail(resetLink)
+      });
+      res.json({ message: 'If that email exists, a reset link was sent.' });
+    } catch(e) {
+      console.error('Email send error:', e.message);
+      res.status(500).json({ error: 'Could not send reset email. Please try again.' });
+    }
+  } else {
+    // Dev fallback — no email service configured
+    console.log('[dev] password reset link:', resetLink);
+    res.json({ message: 'Dev mode: no email service configured.', resetLink });
+  }
 });
 
 app.post('/api/auth/reset', async (req, res) => {
