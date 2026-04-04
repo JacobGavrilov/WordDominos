@@ -648,11 +648,18 @@ app.get('*', (req, res) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
+if (!process.env.DATABASE_URL) {
+  console.error('FATAL: DATABASE_URL environment variable is not set.');
+  console.error('Add a PostgreSQL database to your Railway project and link it to this service.');
+  process.exit(1);
+}
+
 initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`\n🗺️  NYC Street Walker running on http://localhost:${PORT}\n`);
   });
 }).catch(e => {
-  console.error('Failed to init DB:', e.message);
+  console.error('Failed to init DB:', e?.message || e?.code || String(e));
+  console.error('DATABASE_URL:', process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:\/\/.*@/, '://***@') : 'NOT SET');
   process.exit(1);
 });
