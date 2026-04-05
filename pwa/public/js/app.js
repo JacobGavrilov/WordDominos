@@ -890,7 +890,6 @@ async function loadBadges() {
     ]);
     renderBadges();
     renderMetaBadges();
-    renderWeeklyStats();
     renderFeedWeeklyCard();
   } catch { renderBadges(); }
 }

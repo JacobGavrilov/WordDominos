@@ -17,16 +17,20 @@
 
 <!-- ══════════════════════ AUTH SCREEN ══════════════════════ -->
 <div id="auth-screen" class="screen active">
+  <div class="auth-bg-grid"></div>
   <div class="auth-hero">
-    <div class="auth-icon">🗺️</div>
+    <div class="auth-icon-wrap">
+      <div class="auth-icon">🗺️</div>
+    </div>
     <h1>NYC Street Walker</h1>
     <p>Track every street you've walked<br>across New York City</p>
   </div>
 
-  <div class="auth-tabs">
-    <button class="auth-tab active" id="tab-login-btn" onclick="showAuthTab('login')">Log In</button>
-    <button class="auth-tab" id="tab-signup-btn" onclick="showAuthTab('signup')">Sign Up</button>
-  </div>
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login-btn" onclick="showAuthTab('login')">Log In</button>
+      <button class="auth-tab" id="tab-signup-btn" onclick="showAuthTab('signup')">Sign Up</button>
+    </div>
 
   <!-- LOGIN -->
   <div id="login-panel" class="auth-form">
@@ -81,6 +85,7 @@
     <button class="btn-primary" onclick="doSignup()">Create Account</button>
     <p id="signup-error" class="form-error hidden"></p>
   </div>
+  </div><!-- /auth-card -->
 </div>
 
 <!-- ══════════════════════ MAIN APP ══════════════════════════ -->
