@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gay Body Type Calculator</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --rainbow-1: #FF6B6B;
+      --rainbow-2: #FF8E53;
+      --rainbow-3: #FFD93D;
+      --rainbow-4: #6BCB77;
+      --rainbow-5: #4D96FF;
+      --rainbow-6: #C77DFF;
+      --card: #1a1a2e;
+      --surface: #16213e;
+      --text: #eaeaea;
+      --muted: #888;
+    }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: #0f0f1a;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 900;
+      text-align: center;
+      background: linear-gradient(90deg,
+        var(--rainbow-1), var(--rainbow-2), var(--rainbow-3),
+        var(--rainbow-4), var(--rainbow-5), var(--rainbow-6));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 20px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+    }
+
+    .field {
+      margin-bottom: 1.4rem;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      font-size: 0.95rem;
+      color: #ccc;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border-radius: 10px;
+      border: 2px solid #2a2a4a;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 1rem;
+      font-family: 'Nunito', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--rainbow-5);
+    }
+
+    .unit-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .unit-row input {
+      flex: 1;
+    }
+
+    .unit-label {
+      align-self: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+
+    .toggle-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.4rem;
+    }
+
+    .toggle-btn {
+      flex: 1;
+      padding: 0.5rem;
+      border-radius: 8px;
+      border: 2px solid #2a2a4a;
+      background: var(--surface);
+      color: var(--muted);
+      font-family: 'Nunito', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .toggle-btn.active {
+      border-color: var(--rainbow-5);
+      color: var(--rainbow-5);
+      background: rgba(77,150,255,0.1);
+    }
+
+    button.calc-btn {
+      width: 100%;
+      padding: 1rem;
+      border: none;
+      border-radius: 12px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 900;
+      cursor: pointer;
+      background: linear-gradient(90deg,
+        var(--rainbow-1), var(--rainbow-2), var(--rainbow-3),
+        var(--rainbow-4), var(--rainbow-5), var(--rainbow-6));
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      transition: transform 0.1s, opacity 0.2s;
+      margin-top: 0.5rem;
+    }
+
+    button.calc-btn:hover { opacity: 0.92; }
+    button.calc-btn:active { transform: scale(0.98); }
+
+    /* Result card */
+    #result {
+      display: none;
+      width: 100%;
+      max-width: 480px;
+      margin-top: 1.5rem;
+    }
+
+    .result-card {
+      background: var(--card);
+      border-radius: 20px;
+      padding: 2rem;
+      text-align: center;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+      animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes pop {
+      from { transform: scale(0.85); opacity: 0; }
+      to   { transform: scale(1);    opacity: 1; }
+    }
+
+    .body-type-emoji {
+      font-size: 5rem;
+      display: block;
+      margin-bottom: 0.5rem;
+      animation: wiggle 0.6s ease;
+    }
+
+    @keyframes wiggle {
+      0%   { transform: rotate(0deg); }
+      25%  { transform: rotate(-8deg); }
+      50%  { transform: rotate(8deg); }
+      75%  { transform: rotate(-4deg); }
+      100% { transform: rotate(0deg); }
+    }
+
+    .body-type-name {
+      font-size: 2.2rem;
+      font-weight: 900;
+      background: linear-gradient(90deg,
+        var(--rainbow-4), var(--rainbow-5), var(--rainbow-6));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+    }
+
+    .body-type-tagline {
+      font-size: 1rem;
+      color: var(--muted);
+      font-style: italic;
+      margin-bottom: 1rem;
+    }
+
+    .body-type-desc {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: #ccc;
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .stat-chip {
+      background: var(--surface);
+      border-radius: 20px;
+      padding: 0.3rem 0.8rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .stat-chip span {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .anthem {
+      font-size: 0.85rem;
+      color: var(--muted);
+      border-top: 1px solid #2a2a4a;
+      padding-top: 0.8rem;
+    }
+
+    .anthem strong {
+      color: var(--rainbow-3);
+    }
+
+    .error-msg {
+      color: var(--rainbow-1);
+      font-size: 0.85rem;
+      margin-top: 0.3rem;
+      display: none;
+    }
+
+    footer {
+      margin-top: 2.5rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Gay Body Type Calculator</h1>
+  <p class="subtitle">science. sort of. mostly vibes.</p>
+
+  <div class="card">
+    <div class="field">
+      <label>Units</label>
+      <div class="toggle-row">
+        <button class="toggle-btn active" id="btn-imperial" onclick="setUnits('imperial')">Imperial (ft/lb)</button>
+        <button class="toggle-btn" id="btn-metric" onclick="setUnits('metric')">Metric (cm/kg)</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="age">Age</label>
+      <div class="unit-row">
+        <input type="number" id="age" placeholder="e.g. 28" min="18" max="99" />
+        <span class="unit-label">years</span>
+      </div>
+      <div class="error-msg" id="err-age">Enter an age between 18 and 99.</div>
+    </div>
+
+    <div class="field" id="height-imperial">
+      <label>Height</label>
+      <div class="unit-row">
+        <input type="number" id="feet" placeholder="ft" min="3" max="8" />
+        <span class="unit-label">ft</span>
+        <input type="number" id="inches" placeholder="in" min="0" max="11" />
+        <span class="unit-label">in</span>
+      </div>
+      <div class="error-msg" id="err-height-imp">Enter a valid height.</div>
+    </div>
+
+    <div class="field" id="height-metric" style="display:none">
+      <label for="cm">Height (cm)</label>
+      <div class="unit-row">
+        <input type="number" id="cm" placeholder="e.g. 178" min="100" max="250" />
+        <span class="unit-label">cm</span>
+      </div>
+      <div class="error-msg" id="err-height-met">Enter a valid height in cm.</div>
+    </div>
+
+    <div class="field" id="weight-imperial">
+      <label for="lbs">Weight</label>
+      <div class="unit-row">
+        <input type="number" id="lbs" placeholder="e.g. 165" min="60" max="600" />
+        <span class="unit-label">lbs</span>
+      </div>
+      <div class="error-msg" id="err-weight-imp">Enter a valid weight in lbs.</div>
+    </div>
+
+    <div class="field" id="weight-metric" style="display:none">
+      <label for="kg">Weight</label>
+      <div class="unit-row">
+        <input type="number" id="kg" placeholder="e.g. 75" min="30" max="275" />
+        <span class="unit-label">kg</span>
+      </div>
+      <div class="error-msg" id="err-weight-met">Enter a valid weight in kg.</div>
+    </div>
+
+    <button class="calc-btn" onclick="calculate()">What's My Type? ✨</button>
+  </div>
+
+  <div id="result">
+    <div class="result-card">
+      <span class="body-type-emoji" id="res-emoji"></span>
+      <div class="body-type-name" id="res-name"></div>
+      <div class="body-type-tagline" id="res-tagline"></div>
+      <div class="stats-row">
+        <div class="stat-chip">BMI <span id="res-bmi"></span></div>
+        <div class="stat-chip">Age <span id="res-age"></span></div>
+      </div>
+      <div class="body-type-desc" id="res-desc"></div>
+      <div class="anthem" id="res-anthem"></div>
+    </div>
+  </div>
+
+  <footer>Just for fun. All body types are valid. Be gay, do crimes (legally).</footer>
+
+<script>
+  let units = 'imperial';
+
+  function setUnits(u) {
+    units = u;
+    document.getElementById('btn-imperial').classList.toggle('active', u === 'imperial');
+    document.getElementById('btn-metric').classList.toggle('active', u === 'metric');
+    document.getElementById('height-imperial').style.display = u === 'imperial' ? '' : 'none';
+    document.getElementById('height-metric').style.display  = u === 'metric'   ? '' : 'none';
+    document.getElementById('weight-imperial').style.display = u === 'imperial' ? '' : 'none';
+    document.getElementById('weight-metric').style.display  = u === 'metric'   ? '' : 'none';
+    hideErrors();
+  }
+
+  function hideErrors() {
+    document.querySelectorAll('.error-msg').forEach(e => e.style.display = 'none');
+  }
+
+  function showErr(id) {
+    document.getElementById(id).style.display = 'block';
+  }
+
+  function calculate() {
+    hideErrors();
+    let valid = true;
+
+    const age = parseInt(document.getElementById('age').value);
+    if (isNaN(age) || age < 18 || age > 99) { showErr('err-age'); valid = false; }
+
+    let heightM, weightKg;
+
+    if (units === 'imperial') {
+      const ft  = parseFloat(document.getElementById('feet').value);
+      const ins = parseFloat(document.getElementById('inches').value);
+      if (isNaN(ft) || ft < 3 || ft > 8 || isNaN(ins) || ins < 0 || ins > 11) {
+        showErr('err-height-imp'); valid = false;
+      } else {
+        heightM = ((ft * 12) + ins) * 0.0254;
+      }
+      const lbs = parseFloat(document.getElementById('lbs').value);
+      if (isNaN(lbs) || lbs < 60 || lbs > 600) { showErr('err-weight-imp'); valid = false; }
+      else weightKg = lbs * 0.453592;
+    } else {
+      const cm = parseFloat(document.getElementById('cm').value);
+      if (isNaN(cm) || cm < 100 || cm > 250) { showErr('err-height-met'); valid = false; }
+      else heightM = cm / 100;
+      const kg = parseFloat(document.getElementById('kg').value);
+      if (isNaN(kg) || kg < 30 || kg > 275) { showErr('err-weight-met'); valid = false; }
+      else weightKg = kg;
+    }
+
+    if (!valid) return;
+
+    const bmi = weightKg / (heightM * heightM);
+    const type = getBodyType(age, bmi);
+
+    document.getElementById('res-emoji').textContent   = type.emoji;
+    document.getElementById('res-name').textContent    = type.name;
+    document.getElementById('res-tagline').textContent = type.tagline;
+    document.getElementById('res-bmi').textContent     = bmi.toFixed(1);
+    document.getElementById('res-age').textContent     = age;
+    document.getElementById('res-desc').textContent    = type.desc;
+    document.getElementById('res-anthem').innerHTML    = '🎵 Anthem: <strong>' + type.anthem + '</strong>';
+
+    const resultEl = document.getElementById('result');
+    resultEl.style.display = 'block';
+    resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // re-trigger animation
+    const card = resultEl.querySelector('.result-card');
+    card.style.animation = 'none';
+    card.offsetHeight; // reflow
+    card.style.animation = '';
+  }
+
+  // BMI bands: <18.5 underweight | 18.5-22 lean | 22-27 average | 27-32 stocky | 32-37 chubby | 37+ big
+  // Age bands: 18-25 young | 26-35 mid | 36-49 mature | 50+ silver
+  function getBodyType(age, bmi) {
+    const types = {
+      // ── YOUNG ────────────────────────────────────────────────────────
+      twink: {
+        name: 'Twink', emoji: '🐣',
+        tagline: 'Chronically online, 0% body fat, 100% drama.',
+        desc: 'You\'re the guy who eats a whole pizza and stays skinny. Everyone either wants to be you or adopt you. You thrive on iced coffee, attention, and Charli XCX albums.',
+        anthem: 'BRAT – Charli XCX'
+      },
+      pup: {
+        name: 'Pup', emoji: '🐶',
+        tagline: 'Loyal, playful, and definitely owns a harness.',
+        desc: 'Young, energetic, and just figuring it all out. You\'re enthusiastic about everything — bars, hiking, brunch, situationships. The world is your puppy playground.',
+        anthem: 'Good As Hell – Lizzo'
+      },
+      babyjock: {
+        name: 'Baby Jock', emoji: '🏋️',
+        tagline: 'Gymcel with an Only Fans contemplation.',
+        desc: 'You\'re young, you\'re built, and your mirror selfie game is undefeated. You\'ve definitely sent an unsolicited gym progress pic. We forgive you.',
+        anthem: 'Physical – Dua Lipa'
+      },
+      cub: {
+        name: 'Cub', emoji: '🐻',
+        tagline: 'A bear in training. Soft, sweet, very huggable.',
+        desc: 'You\'re the younger, rounder, more approachable version of a bear. Teddy bear energy. You love comfort food, cozy sweaters, and big bear hugs.',
+        anthem: 'As It Was – Harry Styles'
+      },
+      // ── MID ──────────────────────────────────────────────────────────
+      otter: {
+        name: 'Otter', emoji: '🦦',
+        tagline: 'Hairy, lean, and surprisingly buoyant.',
+        desc: 'Slim with some fur — the otter is agile, social, and adorable. You probably have opinions about specialty coffee and own at least three flannel shirts.',
+        anthem: 'Levitating – Dua Lipa'
+      },
+      wolf: {
+        name: 'Wolf', emoji: '🐺',
+        tagline: 'Rugged, mysterious, and definitely smells amazing.',
+        desc: 'Lean but scrappy with a hint of danger. You\'re the one at the party everyone glances at twice. Part otter, part bear, all attitude.',
+        anthem: 'Bad Guy – Billie Eilish'
+      },
+      jock: {
+        name: 'Jock', emoji: '⚡',
+        tagline: 'You have a gym membership AND you use it.',
+        desc: 'Athletic build, good posture, and an intimidating Spotify workout playlist. You meal prep on Sundays and probably have a protein shaker in your bag right now.',
+        anthem: 'Run the World (Girls) – Beyoncé'
+      },
+      bear: {
+        name: 'Bear', emoji: '🐻‍❄️',
+        tagline: 'Big. Warm. Will absolutely crush you in a hug.',
+        desc: 'The bear is a pillar of the gay community — big, beefy, and magnetic. Bears are the guys everyone wants to hug. You probably own a flannel that predates 2010.',
+        anthem: 'Man! I Feel Like a Woman – Shania Twain'
+      },
+      chub: {
+        name: 'Chub', emoji: '🍑',
+        tagline: 'Thick thighs, generous energy, certified snack.',
+        desc: 'Curvy and confident. The chub is cherished, adored, and has a dedicated fanbase (chasers are loyal). You bring warmth into every room.',
+        anthem: 'Watermelon Sugar – Harry Styles'
+      },
+      // ── MATURE ───────────────────────────────────────────────────────
+      daddy: {
+        name: 'Daddy', emoji: '🥃',
+        tagline: 'Distinguished. Experienced. Mysteriously always has good bourbon.',
+        desc: 'You\'ve figured out who you are and you own it. Silver at the temples, solid handshake, knows exactly what to order at a restaurant. The younger gays are intrigued.',
+        anthem: 'Golden – Harry Styles'
+      },
+      silverfox: {
+        name: 'Silver Fox', emoji: '🦊',
+        tagline: 'Aging like a fine wine in a very nice suit.',
+        desc: 'Lean, distinguished, and effortlessly stylish. You are the reason the phrase "silver fox" was invented. You drink espresso, not iced lattes.',
+        anthem: 'Still Got It – Tom Jones'
+      },
+      muscledaddy: {
+        name: 'Muscle Daddy', emoji: '💪',
+        tagline: 'Age is a suggestion. The gym disagrees.',
+        desc: 'You\'ve been lifting since before most twinks were born and it shows. Thick arms, salt-and-pepper stubble, and the audacity to look better at your age than most do at 25.',
+        anthem: 'Stronger – Kanye West'
+      },
+      papabear: {
+        name: 'Papa Bear', emoji: '🏔️',
+        tagline: 'The biggest, coziest, most legendary bear of all.',
+        desc: 'You\'ve reached peak bear. Solid, warm, commanding. You\'re the designated hugger at every Pride event and you take that responsibility seriously.',
+        anthem: 'Home – Michael Bublé'
+      },
+      supercub: {
+        name: 'Super Cub', emoji: '🍕',
+        tagline: 'Round, warm, and the life of every party.',
+        desc: 'Bigger cub energy — you\'re the fun one, the loud one, the one bringing snacks. People gravitate toward you like a gravity well of good vibes.',
+        anthem: 'Shake It Off – Taylor Swift'
+      },
+      // ── SILVER ───────────────────────────────────────────────────────
+      legend: {
+        name: 'Gay Legend', emoji: '👑',
+        tagline: 'You survived the 80s, the 90s, and bad haircuts. A hero.',
+        desc: 'You\'ve been through it all. Stonewall? You heard about it from someone who was there. You are a walking piece of gay history and the community owes you everything.',
+        anthem: 'I Will Survive – Gloria Gaynor'
+      },
+      silverotter: {
+        name: 'Silver Otter', emoji: '🌊',
+        tagline: 'Slim, sophisticated, and has seen some things.',
+        desc: 'Slender, older, and impossibly cool. You\'ve got great posture, a dry wit, and at least one incredible story from a foreign country in the 90s.',
+        anthem: 'Ageless Beauty – Stars'
+      },
+      grandbear: {
+        name: 'Grand Bear', emoji: '🏛️',
+        tagline: 'An institution. A monument. A national treasure.',
+        desc: 'You have reached the apex of bear-dom. You are large, in charge, and the gay bar probably has a stool with your name on it. You are beloved.',
+        anthem: 'Simply the Best – Tina Turner'
+      },
+    };
+
+    // Age category
+    const isYoung  = age <= 25;
+    const isMid    = age >= 26 && age <= 35;
+    const isMature = age >= 36 && age <= 49;
+    const isSilver = age >= 50;
+
+    if (isYoung) {
+      if (bmi < 18.5)         return types.twink;
+      if (bmi < 22)           return types.pup;
+      if (bmi < 27)           return types.babyjock;
+      if (bmi < 32)           return types.cub;
+      return                         types.supercub;
+    }
+
+    if (isMid) {
+      if (bmi < 18.5)         return types.otter;
+      if (bmi < 22)           return types.wolf;
+      if (bmi < 27)           return types.jock;
+      if (bmi < 32)           return types.bear;
+      return                         types.chub;
+    }
+
+    if (isMature) {
+      if (bmi < 18.5)         return types.silverfox;
+      if (bmi < 22)           return types.wolf;
+      if (bmi < 27)           return types.muscledaddy;
+      if (bmi < 32)           return types.daddy;
+      if (bmi < 37)           return types.papabear;
+      return                         types.papabear;
+    }
+
+    // Silver (50+)
+    if (bmi < 18.5)           return types.silverotter;
+    if (bmi < 22)             return types.silverfox;
+    if (bmi < 27)             return types.legend;
+    if (bmi < 32)             return types.grandbear;
+    return                           types.grandbear;
+  }
+</script>
+</body>
+</html>
